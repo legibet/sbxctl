@@ -52,6 +52,7 @@ sbxctl 只管理运行时状态。它不读取、生成、修改或重载 sing-b
 - `URLTest` 对 urltest 组调用 `CheckOutbounds`，对其他组测试全部成员，对单个 outbound 测一次。单节点测速失败时删除该节点的历史记录，不写错误。所以"记录消失"是失败信号，"urlTestTime 更新"是成功信号。
 - `SelectOutbound` 对不存在的组返回 NotFound，对非 selector 返回 InvalidArgument，对不在组内的节点返回 NotFound。
 - `SubscribeStatus` 和 `SubscribeConnections` 的 `interval` 是纳秒整数，非正数时服务端用 1 秒。
+- `GetStartedAt` 返回毫秒时间戳；服务未启动时为 0，客户端显示 `-`。attached 实例的启动时间是 API service 自身启动的时刻。
 - `Status.trafficAvailable` 为 false 时没有流量和连接数。`SubscribeConnections` 在实例没有连接跟踪时返回 Unimplemented。
 - `SubscribeConnections` 第一帧 `reset = true`，包含活动连接和服务端保留的已关闭连接，后者带 `closedAt`。之后是 NEW、UPDATE、CLOSED 事件，UPDATE 携带流量增量。客户端自己维护连接表。
 - `SubscribeLog` 第一帧 `reset = true`，包含最多 3000 行历史。`ClearLogs` 也会推一帧 `reset`。消息由平台 formatter 生成，包含 ANSI 颜色码和相对时间戳。服务端不按级别过滤，`GetDefaultLogLevel` 返回实例配置的级别供客户端默认过滤。
@@ -284,9 +285,9 @@ Logs：
 
 ### 视觉
 
-- 一个主强调色，加成功、警告、错误三种语义色。启动时请求终端背景色，按明暗选择两套颜色值，不提供主题配置。
+- 只用终端的 16 色：强调色 blue，成功 green，警告 yellow，错误 red，次要文本 bright black，正文用终端默认前景。不硬编码色值，不探测背景明暗，不提供主题配置，界面跟随用户终端配色。
 - 层级靠前景明暗、字重和留白表达。主体内容没有边框，只有浮层有边框。
-- 焦点行用强调色背景。当前选择的节点用强调色标记和加粗。危险操作确认用错误色。
+- 焦点行用反色。当前选择的节点用强调色标记和加粗。危险操作确认用错误色。
 - 延迟用低饱和语义色分档，数值始终显示。无记录显示 `-`。
 - 不用图标字体、渐变、动画、ASCII Logo。
 - 终端无色彩时靠文本标记辨认状态。
@@ -348,7 +349,7 @@ Session：
 - 一个活动目标对应一个 Session，拥有 `grpc.ClientConn`、根 context 和所有流 goroutine。
 - 常驻流：ServiceStatus、Status、Groups、ClashMode。ClashMode 返回 NotFound 时标记不可用并停止重试。
 - 按工作区启停：Outbounds、Connections、Logs。
-- 每条流独立重连，退避 1s 起翻倍到 30s 上限。Unauthenticated 不重连。
+- 每条流独立重连，退避 1s 起翻倍到 10s 上限。Unauthenticated 和版本不兼容不重连。
 - Session 通过一个事件 channel 向 TUI 推送更新，TUI 用一个 Cmd 循环读取。CLI 直接调用 Session 方法取快照或迭代流。
 - 切换目标时取消旧 Session 的 context，等待 goroutine 退出后再建新的。
 

@@ -19,8 +19,14 @@ type workspace interface {
 	setSize(width, height int)
 	handleKey(msg tea.KeyPressMsg) tea.Cmd
 	setFilter(text string)
+	tick(now time.Time)
 	view() string
 	bindings() []key.Binding
+}
+
+type confirmMsg struct {
+	question string
+	action   tea.Cmd
 }
 
 type actionMsg struct {
@@ -34,7 +40,7 @@ type sessionEventMsg struct {
 	ok      bool
 }
 
-type proxyTickMsg time.Time
+type tickMsg time.Time
 type noticeExpiredMsg uint64
 
 type notice struct {
@@ -57,9 +63,8 @@ type app struct {
 	targetCursor  cursor
 	filter        textinput.Model
 	filters       [3]string
-	confirm       string
+	confirm       *confirmMsg
 	notice        notice
-	proxyTicking  bool
 
 	connState   sbx.ConnState
 	connAttempt int
@@ -84,21 +89,22 @@ func newApp(ep sbx.Endpoint, name string, file *config.File, session *sbx.Sessio
 	input.Prompt = "/"
 	input.SetWidth(40)
 	a := app{
-		endpoint:     ep,
-		name:         name,
-		file:         file,
-		session:      session,
-		theme:        t,
-		keys:         keys,
-		connState:    sbx.StateConnecting,
-		filter:       input,
-		proxyTicking: true,
+		endpoint:  ep,
+		name:      name,
+		file:      file,
+		session:   session,
+		theme:     t,
+		keys:      keys,
+		connState: sbx.StateConnecting,
+		filter:    input,
 	}
 	var client *sbx.Client
 	if session != nil {
 		client = session.Client()
 	}
 	a.proxies = newProxies(t, keys, client)
+	a.connections = newConnections(t, keys, client)
+	a.logs = newLogs(t, keys, client)
 	if session == nil {
 		a.overlay = overlayTargets
 	}
@@ -106,7 +112,7 @@ func newApp(ep sbx.Endpoint, name string, file *config.File, session *sbx.Sessio
 }
 
 func (a app) Init() tea.Cmd {
-	commands := []tea.Cmd{proxyTick()}
+	commands := []tea.Cmd{tick()}
 	if a.session != nil {
 		a.session.Start()
 		commands = append(commands, waitSession(a.session))
@@ -129,13 +135,15 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		a.applySessionEvent(msg.event)
 		a.syncStreams()
 		return a, waitSession(msg.session)
-	case proxyTickMsg:
-		a.proxies.tick(time.Time(msg))
-		a.proxyTicking = false
-		if a.active == 0 {
-			a.proxyTicking = true
-			return a, proxyTick()
-		}
+	case tickMsg:
+		a.currentWorkspace().tick(time.Time(msg))
+		return a, tick()
+	case confirmMsg:
+		confirm := msg
+		a.confirm = &confirm
+		return a, nil
+	case overlayKind:
+		a.overlay = msg
 		return a, nil
 	case noticeExpiredMsg:
 		if a.notice.id == uint64(msg) {
@@ -158,18 +166,22 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		a.notice.text = ""
 		a.notice.danger = false
 	}
+	if a.confirm != nil {
+		if msg.String() == "ctrl+c" {
+			return a, tea.Quit
+		}
+		action := a.confirm.action
+		a.confirm = nil
+		if msg.String() == "y" {
+			return a, action
+		}
+		return a, nil
+	}
 	if a.overlay != overlayNone {
 		return a.handleOverlay(msg)
 	}
 	if a.filter.Focused() {
 		return a.handleFilter(msg)
-	}
-	if a.confirm != "" {
-		if msg.String() == "ctrl+c" {
-			return a, tea.Quit
-		}
-		a.confirm = ""
-		return a, nil
 	}
 	if command, matched := a.handleGlobal(msg); matched {
 		return a, command
@@ -193,6 +205,9 @@ func (a app) View() tea.View {
 		} else if a.overlay == overlayTargets {
 			entries := targetEntries(a.file, a.name, a.endpoint)
 			workspaceView = targetsOverlay(entries, a.targetCursor, a.width, a.height-3, a.theme)
+		} else if a.overlay == overlayConnection {
+			content := a.connections.detailView(max(1, a.width-8), max(1, a.height-7))
+			workspaceView = renderOverlay("Connection", content, a.width, a.height-3, a.theme)
 		}
 		lines := []string{a.topBar(), a.tabs()}
 		lines = append(lines, strings.Split(workspaceView, "\n")...)
@@ -213,6 +228,8 @@ func (a *app) applySessionEvent(event sbx.Event) {
 		a.connErr = event.Err
 		if event.State == sbx.StateConnected {
 			a.info = event.Info
+			a.logs.setDefaultLevel(event.Info.DefaultLogLevel)
+			a.connections.setUnavailable(nil)
 		}
 	case *sbx.StatusEvent:
 		a.status = event.Status
@@ -220,6 +237,10 @@ func (a *app) applySessionEvent(event sbx.Event) {
 		a.proxies.setGroups(event.Groups)
 	case *sbx.OutboundsEvent:
 		a.proxies.setOutbounds(event.Outbounds)
+	case *sbx.ConnectionsEvent:
+		a.connections.apply(event.Batch)
+	case *sbx.LogsEvent:
+		a.logs.apply(event.Batch)
 	case *sbx.ClashModeEvent:
 		a.mode = event.Mode
 		if event.Modes != nil {
@@ -229,6 +250,8 @@ func (a *app) applySessionEvent(event sbx.Event) {
 		if event.Stream == sbx.StreamClashMode {
 			a.mode = ""
 			a.modes = nil
+		} else if event.Stream == sbx.StreamConnections {
+			a.connections.setUnavailable(event.Err)
 		}
 	}
 }
@@ -301,6 +324,21 @@ func (a *app) handleFilter(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (a *app) handleOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
+	if a.overlay == overlayConnection {
+		switch k {
+		case "ctrl+c":
+			return *a, tea.Quit
+		case "esc", "enter", "q":
+			a.overlay = overlayNone
+			return *a, nil
+		case "x":
+			a.overlay = overlayNone
+			return *a, a.connections.closeFocused()
+		case "j", "k":
+			a.connections.move(k)
+		}
+		return *a, nil
+	}
 	if a.overlay == overlayHelp {
 		if k == "?" || k == "esc" || k == "q" {
 			a.overlay = overlayNone
@@ -359,6 +397,10 @@ func (a *app) replaceSession(endpoint sbx.Endpoint, name string) tea.Cmd {
 	a.filter.Blur()
 	a.proxies.reset()
 	a.proxies.setClient(session.Client())
+	a.connections.reset()
+	a.connections.setClient(session.Client())
+	a.logs.reset()
+	a.logs.setClient(session.Client())
 	a.overlay = overlayNone
 	session.Start()
 	a.syncStreams()
@@ -387,15 +429,10 @@ func (a *app) cycleMode() tea.Cmd {
 }
 
 func (a *app) setActive(active int) tea.Cmd {
-	wasProxies := a.active == 0
 	a.active = active
 	a.filter.SetValue(a.filters[active])
 	a.currentWorkspace().setFilter(a.filters[active])
 	a.syncStreams()
-	if active == 0 && !wasProxies && !a.proxyTicking {
-		a.proxyTicking = true
-		return proxyTick()
-	}
 	return nil
 }
 
@@ -491,8 +528,8 @@ func (a app) footer() string {
 	if a.filter.Focused() {
 		return fitLine(a.filter.View(), a.width)
 	}
-	if a.confirm != "" {
-		return fitLine(a.theme.badgeBad.Render(a.confirm+" (y/n)"), a.width)
+	if a.confirm != nil {
+		return fitLine(a.theme.badgeBad.Render(a.confirm.question+" (y/n)"), a.width)
 	}
 	parts := make([]string, 0)
 	bindings := a.currentWorkspace().bindings()
@@ -541,6 +578,6 @@ func waitSession(session *sbx.Session) tea.Cmd {
 	}
 }
 
-func proxyTick() tea.Cmd {
-	return tea.Tick(time.Second, func(now time.Time) tea.Msg { return proxyTickMsg(now) })
+func tick() tea.Cmd {
+	return tea.Tick(time.Second, func(now time.Time) tea.Msg { return tickMsg(now) })
 }

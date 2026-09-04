@@ -16,6 +16,7 @@ const (
 	overlayNone overlayKind = iota
 	overlayHelp
 	overlayTargets
+	overlayConnection
 )
 
 type targetEntry struct {

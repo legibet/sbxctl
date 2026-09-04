@@ -113,7 +113,7 @@ func newSession(client *Client) *Session {
 		streams:      make(map[Stream]streamRun),
 		wake:         make(chan struct{}),
 		backoffStart: time.Second,
-		backoffMax:   30 * time.Second,
+		backoffMax:   10 * time.Second,
 	}
 }
 

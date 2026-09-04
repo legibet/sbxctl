@@ -3,13 +3,15 @@ package ui
 import "charm.land/bubbles/v2/key"
 
 type keyMap struct {
-	proxies, connections, logs key.Binding
-	next, previous             key.Binding
-	filter, help, targets      key.Binding
-	reconnect, mode, quit      key.Binding
-	move, selectItem           key.Binding
-	test, testGroup            key.Binding
-	pane, sort, reverse        key.Binding
+	proxies, connections, logs  key.Binding
+	next, previous              key.Binding
+	filter, help, targets       key.Binding
+	reconnect, mode, quit       key.Binding
+	move, selectItem, details   key.Binding
+	test, testGroup             key.Binding
+	pane, sort, reverse         key.Binding
+	state, closeConn, closeAll  key.Binding
+	pause, latest, level, clear key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -27,11 +29,19 @@ func newKeyMap() keyMap {
 		quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 		move:        key.NewBinding(key.WithKeys("j", "k", "up", "down", "g", "G", "ctrl+d", "ctrl+u", "ctrl+f", "ctrl+b", "pgup", "pgdown", "home", "end"), key.WithHelp("j/k", "move")),
 		selectItem:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+		details:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details")),
 		test:        key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "test")),
 		testGroup:   key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "test group")),
 		pane:        key.NewBinding(key.WithKeys("h", "l", "left", "right"), key.WithHelp("h/l", "switch pane")),
 		sort:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
 		reverse:     key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "reverse")),
+		state:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "active/closed/all")),
+		closeConn:   key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "close")),
+		closeAll:    key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "close all")),
+		pause:       key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "pause/resume")),
+		latest:      key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "latest")),
+		level:       key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "level")),
+		clear:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear")),
 	}
 }
 
