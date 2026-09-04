@@ -24,6 +24,29 @@ func formatRate(value int64) string {
 	return formatBytes(value) + "/s"
 }
 
+func formatRelativeTime(value, now time.Time) string {
+	if value.IsZero() {
+		return "-"
+	}
+	return formatShortDuration(now.Sub(value)) + " ago"
+}
+
+func formatShortDuration(duration time.Duration) string {
+	if duration < 0 {
+		duration = 0
+	}
+	switch {
+	case duration < time.Minute:
+		return fmt.Sprintf("%ds", duration/time.Second)
+	case duration < time.Hour:
+		return fmt.Sprintf("%dm", duration/time.Minute)
+	case duration < 24*time.Hour:
+		return fmt.Sprintf("%dh", duration/time.Hour)
+	default:
+		return fmt.Sprintf("%dd", duration/(24*time.Hour))
+	}
+}
+
 func formatDuration(duration time.Duration) string {
 	if duration < time.Minute {
 		return fmt.Sprintf("%ds", int64(duration/time.Second))

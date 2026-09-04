@@ -9,7 +9,8 @@ import (
 )
 
 type resolved struct {
-	Name string
+	Name    string
+	version sbx.Version
 	sbx.Endpoint
 }
 

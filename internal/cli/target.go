@@ -38,16 +38,15 @@ func newTargetListCommand(flags *rootFlags) *cobra.Command {
 			if flags.Output != "table" {
 				return writeJSON(cmd.OutOrStdout(), items)
 			}
-			writer := tableWriter(cmd.OutOrStdout())
-			fmt.Fprintln(writer, "NAME\tURL\tCURRENT")
+			t := newTable(cmd.OutOrStdout(), left("NAME"), left("URL"), left("CURRENT"))
 			for _, item := range items {
 				current := ""
 				if item.Current {
 					current = "*"
 				}
-				fmt.Fprintf(writer, "%s\t%s\t%s\n", item.Name, item.URL, current)
+				t.Row(item.Name, item.URL, current)
 			}
-			return writer.Flush()
+			return t.Flush()
 		},
 	}
 }
@@ -84,14 +83,15 @@ func newTargetShowCommand(flags *rootFlags) *cobra.Command {
 					HasSecret bool `json:"has_secret"`
 				}{targetOutput: item, HasSecret: target.Secret != ""})
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "name:         %s\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "url:          %s\n", target.URL)
-			fmt.Fprintf(cmd.OutOrStdout(), "current:      %t\n", item.Current)
-			fmt.Fprintf(cmd.OutOrStdout(), "secret:       %s\n", secret)
-			fmt.Fprintf(cmd.OutOrStdout(), "ca:           %s\n", target.TLS.CAFile)
-			fmt.Fprintf(cmd.OutOrStdout(), "server name:  %s\n", target.TLS.ServerName)
-			fmt.Fprintf(cmd.OutOrStdout(), "insecure:     %t\n", target.TLS.Insecure)
-			return nil
+			t := newTable(cmd.OutOrStdout(), left(""), left(""))
+			t.Row("name:", name)
+			t.Row("url:", target.URL)
+			t.Row("current:", fmt.Sprint(item.Current))
+			t.Row("secret:", secret)
+			t.Row("ca:", target.TLS.CAFile)
+			t.Row("server name:", target.TLS.ServerName)
+			t.Row("insecure:", fmt.Sprint(target.TLS.Insecure))
+			return t.Flush()
 		},
 	}
 }

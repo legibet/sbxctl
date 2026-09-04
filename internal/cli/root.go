@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/legibet/sbxctl/internal/config"
+	"github.com/legibet/sbxctl/internal/sbx"
 	"github.com/spf13/cobra"
 )
 
@@ -62,8 +65,43 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().DurationVar(&flags.Timeout, "timeout", 10*time.Second, "Request timeout")
 	root.PersistentFlags().BoolVar(&flags.NoColor, "no-color", false, "Disable color output")
 
-	root.AddCommand(newTargetCommand(flags), newStatusCommand(flags))
+	root.AddCommand(
+		newTargetCommand(flags),
+		newStatusCommand(flags),
+		newGroupsCommand(flags),
+		newOutboundsCommand(flags),
+		newSelectCommand(flags),
+		newTestCommand(flags),
+		newModeCommand(flags),
+		newConnectionsCommand(flags),
+		newLogsCommand(flags),
+	)
 	return root
+}
+
+// connect resolves the endpoint, dials it and verifies the API version.
+func connect(cmd *cobra.Command, flags *rootFlags) (*sbx.Client, resolved, error) {
+	file, err := config.Load()
+	if err != nil {
+		return nil, resolved{}, err
+	}
+	endpoint, err := resolveEndpoint(*flags, file)
+	if err != nil {
+		return nil, resolved{}, err
+	}
+	client, err := sbx.Dial(endpoint.Endpoint)
+	if err != nil {
+		return nil, resolved{}, err
+	}
+	ctx, cancel := context.WithTimeout(cmd.Context(), flags.Timeout)
+	defer cancel()
+	version, err := client.CheckVersion(ctx)
+	if err != nil {
+		client.Close()
+		return nil, resolved{}, err
+	}
+	endpoint.version = version
+	return client, endpoint, nil
 }
 
 func exactArgs(count int) cobra.PositionalArgs {
