@@ -128,6 +128,15 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		a.filter.SetWidth(max(1, a.width-1))
 		a.targetCursor.setHeight(max(1, a.height-8))
 		return a, nil
+	case tea.ModeReportMsg:
+		// Bubble Tea switches to grapheme-cluster widths (mode 2027) once the
+		// terminal answers its startup query, but frames already drawn used
+		// wcwidth and can have wrapped on emoji such as flags. Repaint from
+		// scratch so nothing from those frames is left on screen.
+		if msg.Mode == ansi.ModeUnicodeCore {
+			return a, tea.ClearScreen
+		}
+		return a, nil
 	case sessionEventMsg:
 		if msg.session != a.session || !msg.ok {
 			return a, nil

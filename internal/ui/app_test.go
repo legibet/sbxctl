@@ -65,3 +65,17 @@ func TestSessionEventsRouteToWorkspaces(t *testing.T) {
 		t.Fatalf("connected state = unavailable %v, log level %s", a.connections.unavailable, a.logs.level)
 	}
 }
+
+func TestUnicodeModeReportRepaintsScreen(t *testing.T) {
+	a := newApp(sbx.Endpoint{}, "", nil, nil)
+	_, command := a.Update(tea.ModeReportMsg{Mode: ansi.ModeUnicodeCore, Value: ansi.ModeReset})
+	if command == nil {
+		t.Fatal("mode 2027 report returned no command")
+	}
+	if command() != tea.ClearScreen() {
+		t.Fatalf("mode 2027 report command = %#v, want tea.ClearScreen", command())
+	}
+	if _, command := a.Update(tea.ModeReportMsg{Mode: ansi.ModeSynchronizedOutput, Value: ansi.ModeReset}); command != nil {
+		t.Fatal("unrelated mode report produced a command")
+	}
+}
