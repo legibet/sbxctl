@@ -3,7 +3,7 @@ package sbx
 import (
 	"context"
 	"net"
-	"reflect"
+	"slices"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -90,14 +90,14 @@ func TestAuthorizationMetadata(t *testing.T) {
 			service := &testService{}
 			service.getVersion = func(ctx context.Context) (*daemon.Version, error) {
 				md, _ := metadata.FromIncomingContext(ctx)
-				if got := md.Get("authorization"); !reflect.DeepEqual(got, test.want) {
+				if got := md.Get("authorization"); !slices.Equal(got, test.want) {
 					t.Errorf("unary authorization = %v, want %v", got, test.want)
 				}
 				return &daemon.Version{Version: "1.14.0", ApiVersion: 4}, nil
 			}
 			service.subscribeStatus = func(ctx context.Context, _ *daemon.SubscribeStatusRequest, stream grpc.ServerStreamingServer[daemon.Status]) error {
 				md, _ := metadata.FromIncomingContext(ctx)
-				if got := md.Get("authorization"); !reflect.DeepEqual(got, test.want) {
+				if got := md.Get("authorization"); !slices.Equal(got, test.want) {
 					t.Errorf("stream authorization = %v, want %v", got, test.want)
 				}
 				return stream.Send(&daemon.Status{})

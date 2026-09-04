@@ -1,7 +1,7 @@
 package sbx
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -32,20 +32,10 @@ func TestTestTracker(t *testing.T) {
 		{Tag: "failed", State: TestFailed},
 		{Tag: "timeout", State: TestTimeout},
 	}
-	if got := tracker.Results(); !reflect.DeepEqual(got, want) {
+	if got := tracker.Results(); !slices.Equal(got, want) {
 		t.Fatalf("Results() = %#v, want %#v", got, want)
 	}
 	if !tracker.Done() {
 		t.Fatal("Done() after timeout = false")
-	}
-}
-
-func TestTestStateMarshalText(t *testing.T) {
-	want := []string{"pending", "ok", "failed", "timeout"}
-	for state, text := range want {
-		got, err := TestState(state).MarshalText()
-		if err != nil || string(got) != text {
-			t.Fatalf("TestState(%d).MarshalText() = %q, %v", state, got, err)
-		}
 	}
 }

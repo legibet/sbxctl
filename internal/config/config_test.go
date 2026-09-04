@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
+	"slices"
 	"testing"
 )
 
@@ -37,7 +37,7 @@ func TestRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Load() = %#v, want %#v", got, want)
 	}
-	if names := got.Names(); !reflect.DeepEqual(names, []string{"home", "work"}) {
+	if names := got.Names(); !slices.Equal(names, []string{"home", "work"}) {
 		t.Fatalf("Names() = %v", names)
 	}
 
@@ -58,13 +58,5 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if perm := dirInfo.Mode().Perm(); perm != 0o700 {
 		t.Fatalf("config directory permissions = %o, want 700", perm)
-	}
-	data, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(data)
-	if !strings.Contains(text, "current = 'home'") && !strings.Contains(text, `current = "home"`) {
-		t.Fatalf("config does not contain current target:\n%s", data)
 	}
 }

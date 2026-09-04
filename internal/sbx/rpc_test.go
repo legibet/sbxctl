@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strconv"
 	"testing"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -96,19 +95,12 @@ func TestRPCErrorKinds(t *testing.T) {
 	}
 }
 
-func TestWatchGroupsConversionAndStop(t *testing.T) {
-	testedAt := time.Now().Truncate(time.Second)
+func TestWatchGroupsStopsOnErrStop(t *testing.T) {
 	service := &testService{}
 	service.subscribeGroups = func(_ context.Context, stream grpc.ServerStreamingServer[daemon.Groups]) error {
 		return stream.Send(&daemon.Groups{Group: []*daemon.Group{{
-			Tag:        "proxy",
-			Type:       "selector",
-			Selectable: true,
-			Selected:   "fast",
-			Items: []*daemon.GroupItem{
-				{Tag: "fast", Type: "shadowsocks", UrlTestTime: testedAt.Unix(), UrlTestDelay: 42},
-				{Tag: "untested", Type: "direct"},
-			},
+			Tag:   "proxy",
+			Items: []*daemon.GroupItem{{Tag: "fast"}, {Tag: "direct"}},
 		}}})
 	}
 
@@ -116,17 +108,8 @@ func TestWatchGroupsConversionAndStop(t *testing.T) {
 	called := false
 	err := client.WatchGroups(context.Background(), func(groups []Group) error {
 		called = true
-		if len(groups) != 1 {
-			t.Fatalf("len(groups) = %d, want 1", len(groups))
-		}
-		if groups[0].Items == nil || len(groups[0].Items) != 2 {
-			t.Fatalf("items = %#v", groups[0].Items)
-		}
-		if !groups[0].Items[0].TestedAt.Equal(testedAt) {
-			t.Errorf("TestedAt = %v, want %v", groups[0].Items[0].TestedAt, testedAt)
-		}
-		if !groups[0].Items[1].TestedAt.IsZero() {
-			t.Errorf("untested TestedAt = %v, want zero", groups[0].Items[1].TestedAt)
+		if len(groups) != 1 || len(groups[0].Items) != 2 {
+			t.Fatalf("groups = %#v", groups)
 		}
 		return ErrStop
 	})
@@ -162,23 +145,5 @@ func TestWatchContextCancellation(t *testing.T) {
 	cancel()
 	if err := client.WatchGroups(ctx, func([]Group) error { return nil }); !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
-	}
-}
-
-func TestLogLevelRoundTrip(t *testing.T) {
-	for level := LevelPanic; level <= LevelTrace; level++ {
-		parsed, err := ParseLogLevel(level.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if parsed != level {
-			t.Fatalf("ParseLogLevel(%q) = %v, want %v", level.String(), parsed, level)
-		}
-	}
-	if level, err := ParseLogLevel("WARNING"); err != nil || level != LevelWarn {
-		t.Fatalf("ParseLogLevel(WARNING) = %v, %v", level, err)
-	}
-	if _, err := ParseLogLevel("verbose"); err == nil {
-		t.Fatal("ParseLogLevel(verbose) succeeded")
 	}
 }

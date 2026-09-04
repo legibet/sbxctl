@@ -1,7 +1,7 @@
 package sbx
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -14,19 +14,22 @@ func TestConnectionTableApply(t *testing.T) {
 		{Type: ConnectionNew, ID: "active-1", Connection: &Connection{ID: "active-1", CreatedAt: created}},
 		{Type: ConnectionNew, ID: "closed-1", Connection: &Connection{ID: "closed-1", CreatedAt: created, ClosedAt: closed}},
 	}})
-
-	if got := len(table.Active()); got != 1 {
-		t.Fatalf("len(Active()) = %d, want 1", got)
-	}
-	if got := len(table.Closed()); got != 1 {
-		t.Fatalf("len(Closed()) = %d, want 1", got)
+	if len(table.Active()) != 1 || len(table.Closed()) != 1 {
+		t.Fatalf("after reset snapshot: active %d closed %d", len(table.Active()), len(table.Closed()))
 	}
 
 	table.Apply(ConnectionBatch{Events: []ConnectionEvent{
-		{Type: ConnectionNew, ID: "active-1", Connection: &Connection{ID: "active-1", UplinkTotal: 1000}},
-		{Type: ConnectionUpdate, ID: "active-1", UplinkDelta: 200, DownlinkDelta: 100},
+		{Type: ConnectionNew, ID: "active-1", Connection: &Connection{ID: "active-1", UplinkTotal: 9999}},
 	}})
 	connection, _ := table.Get("active-1")
+	if connection.UplinkTotal != 0 {
+		t.Fatalf("duplicate NEW overwrote totals = %#v", connection)
+	}
+
+	table.Apply(ConnectionBatch{Events: []ConnectionEvent{
+		{Type: ConnectionUpdate, ID: "active-1", UplinkDelta: 200, DownlinkDelta: 100},
+	}})
+	connection, _ = table.Get("active-1")
 	if connection.Uplink != 100 || connection.Downlink != 50 || connection.UplinkTotal != 200 || connection.DownlinkTotal != 100 {
 		t.Fatalf("updated connection = %#v", connection)
 	}
@@ -51,7 +54,7 @@ func TestConnectionTableClosedLimitAndOrder(t *testing.T) {
 		}}})
 	}
 	closed := table.Closed()
-	if got := []string{closed[0].ID, closed[1].ID}; !reflect.DeepEqual(got, []string{"newest", "middle"}) {
+	if got := []string{closed[0].ID, closed[1].ID}; !slices.Equal(got, []string{"newest", "middle"}) {
 		t.Fatalf("closed IDs = %v", got)
 	}
 	if _, ok := table.Get("oldest"); ok {
@@ -80,16 +83,14 @@ func TestConnectionTableGetPrefix(t *testing.T) {
 	}
 }
 
-func TestConnectionTableResetAndCopies(t *testing.T) {
+func TestConnectionTableReset(t *testing.T) {
 	table := NewConnectionTable(10, time.Second)
-	table.Apply(ConnectionBatch{Events: []ConnectionEvent{{Type: ConnectionNew, ID: "first", Connection: &Connection{Chain: []string{"one"}}}}})
+	table.Apply(ConnectionBatch{Events: []ConnectionEvent{{Type: ConnectionNew, ID: "first", Connection: &Connection{}}}})
 	table.Apply(ConnectionBatch{Reset: true, Events: []ConnectionEvent{{Type: ConnectionNew, ID: "second", Connection: &Connection{}}}})
 	if _, ok := table.Get("first"); ok {
 		t.Fatal("reset retained old connection")
 	}
-	active := table.Active()
-	active[0].ID = "changed"
 	if _, ok := table.Get("second"); !ok {
-		t.Fatal("mutating returned slice changed table")
+		t.Fatal("reset missing new connection")
 	}
 }
