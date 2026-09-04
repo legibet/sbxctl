@@ -1,0 +1,42 @@
+version: "2"
+
+run:
+  relative-path-mode: gomod
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/legibet/sbxctl
+  exclusions:
+    generated: strict
+
+linters:
+  default: standard
+  enable:
+    - durationcheck
+    - errorlint
+    - fatcontext
+    - forcetypeassert
+    - makezero
+    - modernize
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - unparam
+    - wastedassign
+  exclusions:
+    generated: strict
+    warn-unused: true
+    rules:
+      - path: _test\.go
+        text: comparing with !=
+        linters:
+          - errorlint

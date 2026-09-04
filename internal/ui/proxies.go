@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/legibet/sbxctl/internal/sbx"
 )
 
@@ -141,13 +142,11 @@ func (w *proxiesWorkspace) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	before := w.left.index
-	consumed := false
+	side := &w.right
 	if w.focus == 0 {
-		consumed = w.left.handleKey(k)
-	} else {
-		consumed = w.right.handleKey(k)
+		side = &w.left
 	}
-	if consumed && w.focus == 0 && w.left.index != before {
+	if side.handleKey(k) && w.focus == 0 && w.left.index != before {
 		w.right.index = 0
 		w.right.offset = 0
 		w.updateCounts()

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+
 	"github.com/legibet/sbxctl/internal/config"
 	"github.com/legibet/sbxctl/internal/sbx"
 )

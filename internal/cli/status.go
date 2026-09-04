@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/legibet/sbxctl/internal/sbx"
 	"github.com/spf13/cobra"
+
+	"github.com/legibet/sbxctl/internal/sbx"
 )
 
 type statusOutput struct {

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/spf13/cobra"
+
 	"github.com/legibet/sbxctl/internal/config"
 	"github.com/legibet/sbxctl/internal/sbx"
-	"github.com/spf13/cobra"
 )
 
 func newTargetCommand(flags *rootFlags) *cobra.Command {

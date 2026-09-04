@@ -63,8 +63,8 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantText := "current = 'home'"
-	if len(data) == 0 || !(strings.Contains(string(data), wantText) || strings.Contains(string(data), `current = "home"`)) {
+	text := string(data)
+	if !strings.Contains(text, "current = 'home'") && !strings.Contains(text, `current = "home"`) {
 		t.Fatalf("config does not contain current target:\n%s", data)
 	}
 }

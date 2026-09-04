@@ -23,7 +23,7 @@ func resolveEndpoint(flags rootFlags, file *config.File) (resolved, error) {
 		return resolved{}, &UsageError{Msg: "--url and --target cannot be used together"}
 	}
 	if flags.urlSet {
-		return resolved{Endpoint: sbx.Endpoint{URL: flags.URL, Secret: flags.Secret}}, nil
+		return resolved{URL: flags.URL, Secret: flags.Secret}, nil
 	}
 
 	targetName := flags.Target
@@ -43,7 +43,7 @@ func resolveEndpoint(flags rootFlags, file *config.File) (resolved, error) {
 	}
 
 	if envURL := os.Getenv("SBXCTL_URL"); envURL != "" {
-		result := resolved{Endpoint: sbx.Endpoint{URL: envURL, Secret: os.Getenv("SBXCTL_SECRET")}}
+		result := resolved{URL: envURL, Secret: os.Getenv("SBXCTL_SECRET")}
 		if flags.secretSet {
 			result.Secret = flags.Secret
 		}
@@ -64,13 +64,11 @@ func resolveEndpoint(flags rootFlags, file *config.File) (resolved, error) {
 
 func resolvedFromTarget(name string, target config.Target) resolved {
 	return resolved{
-		Name: name,
-		Endpoint: sbx.Endpoint{
-			URL:        target.URL,
-			Secret:     target.Secret,
-			CAFile:     target.TLS.CAFile,
-			ServerName: target.TLS.ServerName,
-			Insecure:   target.TLS.Insecure,
-		},
+		Name:       name,
+		URL:        target.URL,
+		Secret:     target.Secret,
+		CAFile:     target.TLS.CAFile,
+		ServerName: target.TLS.ServerName,
+		Insecure:   target.TLS.Insecure,
 	}
 }

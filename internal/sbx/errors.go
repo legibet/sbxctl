@@ -58,8 +58,7 @@ func (e *Error) Unwrap() error {
 }
 
 func KindOf(err error) Kind {
-	var rpcErr *Error
-	if errors.As(err, &rpcErr) {
+	if rpcErr, ok := errors.AsType[*Error](err); ok {
 		return rpcErr.Kind
 	}
 	return KindRemote

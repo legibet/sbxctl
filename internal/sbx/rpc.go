@@ -7,9 +7,10 @@ import (
 	"io"
 	"time"
 
-	"github.com/legibet/sbxctl/internal/daemon"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/legibet/sbxctl/internal/daemon"
 )
 
 const MinAPIVersion = 4

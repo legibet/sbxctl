@@ -3,6 +3,7 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
+
 	"github.com/legibet/sbxctl/internal/config"
 	"github.com/legibet/sbxctl/internal/sbx"
 )

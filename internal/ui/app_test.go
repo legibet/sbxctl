@@ -7,8 +7,18 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/legibet/sbxctl/internal/sbx"
 )
+
+func asApp(t *testing.T, model tea.Model) app {
+	t.Helper()
+	a, ok := model.(app)
+	if !ok {
+		t.Fatalf("model is %T, want app", model)
+	}
+	return a
+}
 
 func TestConfirmationRunsOnlyOnYes(t *testing.T) {
 	a := newApp(sbx.Endpoint{}, "", nil, nil)
@@ -21,12 +31,12 @@ func TestConfirmationRunsOnlyOnYes(t *testing.T) {
 	}
 
 	model, _ := a.Update(confirmMsg{question: "Proceed?", action: action})
-	a = model.(app)
+	a = asApp(t, model)
 	if !strings.Contains(ansi.Strip(a.footer()), "Proceed? (y/n)") {
 		t.Fatalf("confirmation footer = %q", a.footer())
 	}
 	model, command := a.Update(keyPress('y'))
-	a = model.(app)
+	a = asApp(t, model)
 	if a.confirm != nil || command == nil {
 		t.Fatalf("confirmed state = %#v, command nil = %v", a.confirm, command == nil)
 	}
@@ -37,9 +47,9 @@ func TestConfirmationRunsOnlyOnYes(t *testing.T) {
 
 	ran = false
 	model, _ = a.Update(confirmMsg{question: "Proceed?", action: action})
-	a = model.(app)
+	a = asApp(t, model)
 	model, command = a.Update(keyPress('n'))
-	a = model.(app)
+	a = asApp(t, model)
 	if a.confirm != nil || command != nil || ran {
 		t.Fatalf("cancelled confirmation = %#v, command nil = %v, ran = %v", a.confirm, command == nil, ran)
 	}

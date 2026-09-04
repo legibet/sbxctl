@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/legibet/sbxctl/internal/sbx"
 	"github.com/spf13/cobra"
+
+	"github.com/legibet/sbxctl/internal/sbx"
 )
 
 func newLogsCommand(flags *rootFlags) *cobra.Command {
@@ -50,15 +51,16 @@ func newLogsCommand(flags *rootFlags) *cobra.Command {
 			color := colorsEnabled(flags)
 			err = client.WatchLogs(ctx, func(batch sbx.LogBatch) error {
 				entries := filterLogs(batch.Entries, maxLevel, search)
-				if flags.Output == "table" {
+				switch flags.Output {
+				case "table":
 					if err := writeLogTable(cmd, entries, color); err != nil {
 						return err
 					}
-				} else if flags.Output == "json" {
+				case "json":
 					if err := writeJSON(cmd.OutOrStdout(), stripLogEntries(entries)); err != nil {
 						return err
 					}
-				} else {
+				default:
 					for _, entry := range stripLogEntries(entries) {
 						if err := writeJSON(cmd.OutOrStdout(), entry); err != nil {
 							return err

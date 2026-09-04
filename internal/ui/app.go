@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/legibet/sbxctl/internal/config"
 	"github.com/legibet/sbxctl/internal/sbx"
 )
@@ -40,8 +41,10 @@ type sessionEventMsg struct {
 	ok      bool
 }
 
-type tickMsg time.Time
-type noticeExpiredMsg uint64
+type (
+	tickMsg          time.Time
+	noticeExpiredMsg uint64
+)
 
 type notice struct {
 	text   string
@@ -209,14 +212,15 @@ func (a app) View() tea.View {
 		content = exactLines(strings.Split(content, "\n"), a.width, a.height)
 	} else {
 		workspaceView := a.currentWorkspace().view()
-		if a.overlay == overlayHelp {
+		switch a.overlay {
+		case overlayHelp:
 			workspaceView = helpOverlay(a.keys, a.currentWorkspace().bindings(), len(a.modes) > 0, a.width, a.height-3, a.theme)
-		} else if a.overlay == overlayTargets {
+		case overlayTargets:
 			entries := targetEntries(a.file, a.name, a.endpoint)
 			workspaceView = targetsOverlay(entries, a.targetCursor, a.width, a.height-3, a.theme)
-		} else if a.overlay == overlayConnection {
-			content := a.connections.detailView(max(1, a.width-8), max(1, a.height-7))
-			workspaceView = renderOverlay("Connection", content, a.width, a.height-3, a.theme)
+		case overlayConnection:
+			detail := a.connections.detailView(max(1, a.width-8), max(1, a.height-7))
+			workspaceView = renderOverlay("Connection", detail, a.width, a.height-3, a.theme)
 		}
 		lines := []string{a.topBar(), a.tabs()}
 		lines = append(lines, strings.Split(workspaceView, "\n")...)
@@ -256,10 +260,11 @@ func (a *app) applySessionEvent(event sbx.Event) {
 			a.modes = event.Modes
 		}
 	case *sbx.UnavailableEvent:
-		if event.Stream == sbx.StreamClashMode {
+		switch event.Stream {
+		case sbx.StreamClashMode:
 			a.mode = ""
 			a.modes = nil
-		} else if event.Stream == sbx.StreamConnections {
+		case sbx.StreamConnections:
 			a.connections.setUnavailable(event.Err)
 		}
 	}
@@ -274,15 +279,20 @@ func (a *app) handleGlobal(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 	switch {
 	case key.Matches(msg, a.keys.proxies):
-		return a.setActive(0), true
+		a.setActive(0)
+		return nil, true
 	case key.Matches(msg, a.keys.connections):
-		return a.setActive(1), true
+		a.setActive(1)
+		return nil, true
 	case key.Matches(msg, a.keys.logs):
-		return a.setActive(2), true
+		a.setActive(2)
+		return nil, true
 	case key.Matches(msg, a.keys.next):
-		return a.setActive((a.active + 1) % 3), true
+		a.setActive((a.active + 1) % 3)
+		return nil, true
 	case key.Matches(msg, a.keys.previous):
-		return a.setActive((a.active + 2) % 3), true
+		a.setActive((a.active + 2) % 3)
+		return nil, true
 	case key.Matches(msg, a.keys.filter):
 		a.filter.SetValue(a.filters[a.active])
 		return a.filter.Focus(), true
@@ -437,12 +447,11 @@ func (a *app) cycleMode() tea.Cmd {
 	}
 }
 
-func (a *app) setActive(active int) tea.Cmd {
+func (a *app) setActive(active int) {
 	a.active = active
 	a.filter.SetValue(a.filters[active])
 	a.currentWorkspace().setFilter(a.filters[active])
 	a.syncStreams()
-	return nil
 }
 
 func (a *app) syncStreams() {

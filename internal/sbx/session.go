@@ -36,27 +36,28 @@ type ServerInfo struct {
 
 type Event interface{ sessionEvent() }
 
-type ConnEvent struct {
-	State   ConnState
-	Attempt int
-	Info    ServerInfo
-	Err     error
-}
-
-type ServiceEvent struct{ Status ServiceStatus }
-type StatusEvent struct{ Status Status }
-type GroupsEvent struct{ Groups []Group }
-type OutboundsEvent struct{ Outbounds []Outbound }
-type ClashModeEvent struct {
-	Mode  string
-	Modes []string
-}
-type ConnectionsEvent struct{ Batch ConnectionBatch }
-type LogsEvent struct{ Batch LogBatch }
-type UnavailableEvent struct {
-	Stream Stream
-	Err    error
-}
+type (
+	ConnEvent struct {
+		State   ConnState
+		Attempt int
+		Info    ServerInfo
+		Err     error
+	}
+	ServiceEvent   struct{ Status ServiceStatus }
+	StatusEvent    struct{ Status Status }
+	GroupsEvent    struct{ Groups []Group }
+	OutboundsEvent struct{ Outbounds []Outbound }
+	ClashModeEvent struct {
+		Mode  string
+		Modes []string
+	}
+	ConnectionsEvent struct{ Batch ConnectionBatch }
+	LogsEvent        struct{ Batch LogBatch }
+	UnavailableEvent struct {
+		Stream Stream
+		Err    error
+	}
+)
 
 func (*ConnEvent) sessionEvent()        {}
 func (*ServiceEvent) sessionEvent()     {}
@@ -175,7 +176,7 @@ func (s *Session) Close() {
 		s.cancel()
 		s.wg.Wait()
 		close(s.events)
-		_ = s.client.Close()
+		s.client.Close()
 	})
 }
 

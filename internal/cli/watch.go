@@ -51,7 +51,7 @@ func streamContext() (context.Context, context.CancelFunc) {
 
 func canceledStream(err error, ctx context.Context) error {
 	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
-		return nil
+		err = nil
 	}
 	return err
 }

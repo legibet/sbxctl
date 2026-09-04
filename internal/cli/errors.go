@@ -22,8 +22,7 @@ func Main(args []string) int {
 		return 0
 	}
 
-	var usageErr *UsageError
-	if errors.As(err, &usageErr) {
+	if usageErr, ok := errors.AsType[*UsageError](err); ok {
 		fmt.Fprintf(os.Stderr, "sbxctl: %s\n", usageErr.Msg)
 		if command == nil {
 			command = root

@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/legibet/sbxctl/internal/config"
 	"github.com/legibet/sbxctl/internal/sbx"
 )
@@ -59,7 +60,7 @@ func helpOverlay(keys keyMap, workspace []key.Binding, modeAvailable bool, width
 	}
 	rows := max(len(global), len(workspace))
 	lines := []string{t.title.Render(cell("Global", leftWidth, false)) + "    " + t.title.Render(cell("Workspace", rightWidth, false))}
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		left, right := "", ""
 		if i < len(global) {
 			help := global[i].Help()

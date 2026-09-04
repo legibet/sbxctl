@@ -91,8 +91,5 @@ func (c *cursor) visible() (start, end int) {
 
 func (c *cursor) clampOffset() {
 	maxOffset := max(0, c.count-c.height)
-	c.offset = max(0, min(c.offset, maxOffset))
-	if c.index < c.offset {
-		c.offset = c.index
-	}
+	c.offset = max(0, min(c.offset, maxOffset, c.index))
 }

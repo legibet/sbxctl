@@ -9,11 +9,12 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/legibet/sbxctl/internal/daemon"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/legibet/sbxctl/internal/daemon"
 )
 
 type Endpoint struct {
@@ -106,8 +107,8 @@ func newClient(conn *grpc.ClientConn) *Client {
 	return &Client{conn: conn, svc: daemon.NewStartedServiceClient(conn)}
 }
 
-func (c *Client) Close() error {
-	return c.conn.Close()
+func (c *Client) Close() {
+	_ = c.conn.Close()
 }
 
 type authInterceptor struct {

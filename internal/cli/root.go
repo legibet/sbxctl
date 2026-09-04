@@ -7,10 +7,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/legibet/sbxctl/internal/config"
 	"github.com/legibet/sbxctl/internal/sbx"
 	"github.com/legibet/sbxctl/internal/ui"
-	"github.com/spf13/cobra"
 )
 
 type rootFlags struct {

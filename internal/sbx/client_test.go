@@ -6,12 +6,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/legibet/sbxctl/internal/daemon"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/legibet/sbxctl/internal/daemon"
 )
 
 type testService struct {
@@ -69,9 +70,9 @@ func newTestClient(t *testing.T, service daemon.StartedServiceServer, secret str
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		conn.Close()
+		_ = conn.Close()
 		server.Stop()
-		listener.Close()
+		_ = listener.Close()
 	})
 	return newClient(conn)
 }

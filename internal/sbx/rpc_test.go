@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/legibet/sbxctl/internal/daemon"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/legibet/sbxctl/internal/daemon"
 )
 
 func TestCheckVersion(t *testing.T) {
