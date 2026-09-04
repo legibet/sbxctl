@@ -1,0 +1,6 @@
+/sbxctl
+/dist/
+/.tasks/
+.codex/
+.agents/
+.claude/

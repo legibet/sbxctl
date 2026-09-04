@@ -1,0 +1,7 @@
+# Upstream source of api/daemon/started_service.proto
+repo    https://github.com/SagerNet/sing-box
+tag     v1.14.0
+commit  0b8995879f29a9b98ee027bc17b75e101445b238
+path    daemon/started_service.proto
+sha256  4feeac3166f38074888d9a5e04e69c5f92a178d2a2c3e94a963d2999ef4a3994
+license GPL-3.0-or-later with additional name clause (see api/LICENSE.sing-box)
