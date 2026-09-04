@@ -1,32 +1,50 @@
 # sbxctl
 
-Terminal client for the [sing-box API service](https://sing-box.sagernet.org/configuration/service/api/). It works on a running instance, over the API service's gRPC port: outbound groups, URL tests, Clash mode, connections and logs. Configuration and the sing-box process itself are out of reach by design.
+Terminal client for the [sing-box API service](https://sing-box.sagernet.org/configuration/service/api/).
 
 Requires sing-box 1.14.0 or later with the API service enabled.
 
-## Build
+## Install
 
 ```sh
-go build -o sbxctl ./cmd/sbxctl
+go install ./cmd/sbxctl
 ```
 
-## Use
+## Quick start
+
+Add a target:
 
 ```sh
 sbxctl target add home http://127.0.0.1:9090 --secret <secret>
+```
+
+Open the TUI:
+
+```sh
 sbxctl
 ```
 
-`sbxctl` with no subcommand opens the TUI, where `?` lists the keys of the focused workspace. Subcommands are non-interactive and take `--output json` or `jsonl`:
+Press `?` for the keys of the focused workspace.
+
+`--url` and `--secret` connect without saving a target. Saved targets go to `~/.config/sbxctl/config.toml`.
+
+## Commands
 
 ```sh
-sbxctl status
-sbxctl select PROXY hk-01
-sbxctl test PROXY --wait 20s
-sbxctl connections --watch
+sbxctl status                  # version, uptime, traffic
+sbxctl select PROXY hk-01      # select an outbound
+sbxctl test PROXY --wait 20s   # run a URL test
+sbxctl connections --watch     # watch connections
 ```
 
-`sbxctl --help` covers the rest. Targets are stored under your user config directory with mode 0600; `--url` and `--secret` connect without saving anything.
+Subcommands accept `--output json` or `jsonl`. See `sbxctl --help` for all commands.
+
+## Development
+
+```sh
+just build  # build the binary
+just check  # fmt, lint, and test
+```
 
 ## License
 
