@@ -16,7 +16,7 @@ type statusOutput struct {
 	URL        string                  `json:"url"`
 	Version    string                  `json:"version"`
 	APIVersion int                     `json:"api_version"`
-	StartedAt  time.Time               `json:"started_at"`
+	StartedAt  time.Time               `json:"started_at,omitzero"`
 	Mode       *sbx.ClashMode          `json:"mode"`
 	Status     sbx.Status              `json:"status"`
 	Warnings   []sbx.DeprecatedWarning `json:"warnings"`
@@ -108,16 +108,20 @@ func writeStatusTable(cmd *cobra.Command, output statusOutput) error {
 	}
 	t.Row("target:", target)
 	t.Row("version:", fmt.Sprintf("%s (api %d)", output.Version, output.APIVersion))
-	t.Row("uptime:", formatDuration(time.Since(output.StartedAt)))
+	uptime := "-"
+	if !output.StartedAt.IsZero() {
+		uptime = sbx.FormatDuration(time.Since(output.StartedAt))
+	}
+	t.Row("uptime:", uptime)
 	if output.Mode != nil {
 		t.Row("mode:", fmt.Sprintf("%s (%s)", output.Mode.Current, strings.Join(output.Mode.Modes, ", ")))
 	}
 	if output.Status.TrafficAvailable {
-		t.Row("traffic:", fmt.Sprintf("↑ %s  ↓ %s", formatRate(output.Status.Uplink), formatRate(output.Status.Downlink)))
-		t.Row("total:", fmt.Sprintf("↑ %s  ↓ %s", formatBytes(output.Status.UplinkTotal), formatBytes(output.Status.DownlinkTotal)))
+		t.Row("traffic:", fmt.Sprintf("↑ %s  ↓ %s", sbx.FormatRate(output.Status.Uplink), sbx.FormatRate(output.Status.Downlink)))
+		t.Row("total:", fmt.Sprintf("↑ %s  ↓ %s", sbx.FormatBytes(output.Status.UplinkTotal), sbx.FormatBytes(output.Status.DownlinkTotal)))
 		t.Row("connections:", fmt.Sprintf("%d in, %d out", output.Status.ConnectionsIn, output.Status.ConnectionsOut))
 	}
-	t.Row("memory:", formatBytes(int64(output.Status.Memory)))
+	t.Row("memory:", sbx.FormatBytes(int64(output.Status.Memory)))
 	t.Row("goroutines:", strconv.Itoa(output.Status.Goroutines))
 	if len(output.Warnings) > 0 {
 		t.Row("warnings:", strconv.Itoa(len(output.Warnings)))

@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/legibet/sbxctl/internal/config"
 	"github.com/legibet/sbxctl/internal/sbx"
+	"github.com/legibet/sbxctl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -48,8 +50,18 @@ func newRootCommand() *cobra.Command {
 			}
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintln(cmd.ErrOrStderr(), "TUI is not implemented yet")
-			return tuiNotImplementedError{}
+			file, err := config.Load()
+			if err != nil {
+				return err
+			}
+			endpoint, err := resolveEndpoint(*flags, file)
+			if err != nil {
+				if errors.Is(err, errNoTarget) && len(file.Targets) > 0 {
+					return ui.Run(sbx.Endpoint{}, "", file, flags.NoColor)
+				}
+				return err
+			}
+			return ui.Run(endpoint.Endpoint, endpoint.Name, file, flags.NoColor)
 		},
 	}
 	root.SetOut(os.Stdout)

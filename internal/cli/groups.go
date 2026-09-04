@@ -118,7 +118,7 @@ func writeGroupTable(cmd *cobra.Command, group sbx.Group, now time.Time) error {
 		if item.Tag == group.Selected {
 			selected = "*"
 		}
-		t.Row(selected, item.Tag, item.Type, formatDelay(item), formatRelativeTime(item.TestedAt, now))
+		t.Row(selected, item.Tag, item.Type, formatDelay(item), sbx.FormatAgo(item.TestedAt, now))
 	}
 	return t.Flush()
 }
@@ -176,7 +176,7 @@ func newOutboundsCommand(flags *rootFlags) *cobra.Command {
 func writeOutboundsTable(cmd *cobra.Command, outbounds []sbx.Outbound, now time.Time) error {
 	t := newTable(cmd.OutOrStdout(), left("TAG"), left("TYPE"), right("DELAY"), right("TESTED"))
 	for _, outbound := range outbounds {
-		t.Row(outbound.Tag, outbound.Type, formatDelay(outbound), formatRelativeTime(outbound.TestedAt, now))
+		t.Row(outbound.Tag, outbound.Type, formatDelay(outbound), sbx.FormatAgo(outbound.TestedAt, now))
 	}
 	return t.Flush()
 }

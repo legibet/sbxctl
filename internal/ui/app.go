@@ -1,0 +1,546 @@
+package ui
+
+import (
+	"context"
+	"strconv"
+	"strings"
+	"time"
+
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/legibet/sbxctl/internal/config"
+	"github.com/legibet/sbxctl/internal/sbx"
+)
+
+type workspace interface {
+	setSize(width, height int)
+	handleKey(msg tea.KeyPressMsg) tea.Cmd
+	setFilter(text string)
+	view() string
+	bindings() []key.Binding
+}
+
+type actionMsg struct {
+	notice string
+	err    error
+}
+
+type sessionEventMsg struct {
+	session *sbx.Session
+	event   sbx.Event
+	ok      bool
+}
+
+type proxyTickMsg time.Time
+type noticeExpiredMsg uint64
+
+type notice struct {
+	text   string
+	danger bool
+	id     uint64
+}
+
+type app struct {
+	endpoint sbx.Endpoint
+	name     string
+	file     *config.File
+	session  *sbx.Session
+
+	width, height int
+	theme         theme
+	keys          keyMap
+	active        int
+	overlay       overlayKind
+	targetCursor  cursor
+	filter        textinput.Model
+	filters       [3]string
+	confirm       string
+	notice        notice
+	proxyTicking  bool
+
+	connState   sbx.ConnState
+	connAttempt int
+	connErr     error
+	info        sbx.ServerInfo
+	status      sbx.Status
+	mode        string
+	modes       []string
+
+	proxies     proxiesWorkspace
+	connections connectionsWorkspace
+	logs        logsWorkspace
+}
+
+func newApp(ep sbx.Endpoint, name string, file *config.File, session *sbx.Session) app {
+	if file == nil {
+		file = &config.File{Targets: make(map[string]config.Target)}
+	}
+	t := newTheme()
+	keys := newKeyMap()
+	input := textinput.New()
+	input.Prompt = "/"
+	input.SetWidth(40)
+	a := app{
+		endpoint:     ep,
+		name:         name,
+		file:         file,
+		session:      session,
+		theme:        t,
+		keys:         keys,
+		connState:    sbx.StateConnecting,
+		filter:       input,
+		proxyTicking: true,
+	}
+	var client *sbx.Client
+	if session != nil {
+		client = session.Client()
+	}
+	a.proxies = newProxies(t, keys, client)
+	if session == nil {
+		a.overlay = overlayTargets
+	}
+	return a
+}
+
+func (a app) Init() tea.Cmd {
+	commands := []tea.Cmd{proxyTick()}
+	if a.session != nil {
+		a.session.Start()
+		commands = append(commands, waitSession(a.session))
+	}
+	return tea.Batch(commands...)
+}
+
+func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := message.(type) {
+	case tea.WindowSizeMsg:
+		a.width, a.height = msg.Width, msg.Height
+		a.resizeWorkspaces()
+		a.filter.SetWidth(max(1, a.width-1))
+		a.targetCursor.setHeight(max(1, a.height-8))
+		return a, nil
+	case sessionEventMsg:
+		if msg.session != a.session || !msg.ok {
+			return a, nil
+		}
+		a.applySessionEvent(msg.event)
+		a.syncStreams()
+		return a, waitSession(msg.session)
+	case proxyTickMsg:
+		a.proxies.tick(time.Time(msg))
+		a.proxyTicking = false
+		if a.active == 0 {
+			a.proxyTicking = true
+			return a, proxyTick()
+		}
+		return a, nil
+	case noticeExpiredMsg:
+		if a.notice.id == uint64(msg) {
+			a.notice.text = ""
+			a.notice.danger = false
+		}
+		return a, nil
+	case actionMsg:
+		if msg.err != nil {
+			return a.withNotice(msg.err.Error(), true)
+		}
+		return a.withNotice(msg.notice, false)
+	}
+
+	msg, ok := message.(tea.KeyPressMsg)
+	if !ok {
+		return a, nil
+	}
+	if a.notice.text != "" {
+		a.notice.text = ""
+		a.notice.danger = false
+	}
+	if a.overlay != overlayNone {
+		return a.handleOverlay(msg)
+	}
+	if a.filter.Focused() {
+		return a.handleFilter(msg)
+	}
+	if a.confirm != "" {
+		if msg.String() == "ctrl+c" {
+			return a, tea.Quit
+		}
+		a.confirm = ""
+		return a, nil
+	}
+	if command, matched := a.handleGlobal(msg); matched {
+		return a, command
+	}
+	command := a.currentWorkspace().handleKey(msg)
+	if a.active == 0 {
+		a.syncStreams()
+	}
+	return a, command
+}
+
+func (a app) View() tea.View {
+	var content string
+	if a.width < 80 || a.height < 24 {
+		content = lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, "terminal too small (80x24 minimum)")
+		content = exactLines(strings.Split(content, "\n"), a.width, a.height)
+	} else {
+		workspaceView := a.currentWorkspace().view()
+		if a.overlay == overlayHelp {
+			workspaceView = helpOverlay(a.keys, a.currentWorkspace().bindings(), len(a.modes) > 0, a.width, a.height-3, a.theme)
+		} else if a.overlay == overlayTargets {
+			entries := targetEntries(a.file, a.name, a.endpoint)
+			workspaceView = targetsOverlay(entries, a.targetCursor, a.width, a.height-3, a.theme)
+		}
+		lines := []string{a.topBar(), a.tabs()}
+		lines = append(lines, strings.Split(workspaceView, "\n")...)
+		lines = append(lines, a.footer())
+		content = exactLines(lines, a.width, a.height)
+	}
+	view := tea.NewView(content)
+	view.AltScreen = true
+	view.WindowTitle = "sbxctl"
+	return view
+}
+
+func (a *app) applySessionEvent(event sbx.Event) {
+	switch event := event.(type) {
+	case *sbx.ConnEvent:
+		a.connState = event.State
+		a.connAttempt = event.Attempt
+		a.connErr = event.Err
+		if event.State == sbx.StateConnected {
+			a.info = event.Info
+		}
+	case *sbx.StatusEvent:
+		a.status = event.Status
+	case *sbx.GroupsEvent:
+		a.proxies.setGroups(event.Groups)
+	case *sbx.OutboundsEvent:
+		a.proxies.setOutbounds(event.Outbounds)
+	case *sbx.ClashModeEvent:
+		a.mode = event.Mode
+		if event.Modes != nil {
+			a.modes = event.Modes
+		}
+	case *sbx.UnavailableEvent:
+		if event.Stream == sbx.StreamClashMode {
+			a.mode = ""
+			a.modes = nil
+		}
+	}
+}
+
+func (a *app) handleGlobal(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+	if msg.String() == "esc" && a.filters[a.active] != "" {
+		a.filters[a.active] = ""
+		a.filter.SetValue("")
+		a.currentWorkspace().setFilter("")
+		return nil, true
+	}
+	switch {
+	case key.Matches(msg, a.keys.proxies):
+		return a.setActive(0), true
+	case key.Matches(msg, a.keys.connections):
+		return a.setActive(1), true
+	case key.Matches(msg, a.keys.logs):
+		return a.setActive(2), true
+	case key.Matches(msg, a.keys.next):
+		return a.setActive((a.active + 1) % 3), true
+	case key.Matches(msg, a.keys.previous):
+		return a.setActive((a.active + 2) % 3), true
+	case key.Matches(msg, a.keys.filter):
+		a.filter.SetValue(a.filters[a.active])
+		return a.filter.Focus(), true
+	case key.Matches(msg, a.keys.help):
+		a.overlay = overlayHelp
+		return nil, true
+	case key.Matches(msg, a.keys.targets):
+		a.overlay = overlayTargets
+		a.selectActiveTarget()
+		return nil, true
+	case key.Matches(msg, a.keys.reconnect):
+		if a.session != nil && a.connState != sbx.StateFailed {
+			a.session.Reconnect()
+			return nil, true
+		}
+		if a.endpoint.URL != "" {
+			return a.replaceSession(a.endpoint, a.name), true
+		}
+		return nil, true
+	case key.Matches(msg, a.keys.mode):
+		return a.cycleMode(), true
+	case key.Matches(msg, a.keys.quit):
+		return tea.Quit, true
+	}
+	return nil, false
+}
+
+func (a *app) handleFilter(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return *a, tea.Quit
+	case "esc":
+		a.filter.SetValue("")
+		a.filter.Blur()
+		a.filters[a.active] = ""
+		a.currentWorkspace().setFilter("")
+		return *a, nil
+	case "enter":
+		a.filter.Blur()
+		return *a, nil
+	}
+	input, command := a.filter.Update(msg)
+	a.filter = input
+	a.filters[a.active] = input.Value()
+	a.currentWorkspace().setFilter(input.Value())
+	return *a, command
+}
+
+func (a *app) handleOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	k := msg.String()
+	if a.overlay == overlayHelp {
+		if k == "?" || k == "esc" || k == "q" {
+			a.overlay = overlayNone
+			return *a, nil
+		}
+		if k == "ctrl+c" {
+			return *a, tea.Quit
+		}
+		return *a, nil
+	}
+	if k == "esc" || k == "q" {
+		a.overlay = overlayNone
+		return *a, nil
+	}
+	if k == "ctrl+c" {
+		return *a, tea.Quit
+	}
+	entries := targetEntries(a.file, a.name, a.endpoint)
+	a.targetCursor.setCount(len(entries))
+	if a.targetCursor.handleKey(k) {
+		return *a, nil
+	}
+	if k == "enter" && len(entries) > 0 {
+		entry := entries[a.targetCursor.index]
+		if entry.active {
+			a.overlay = overlayNone
+			return *a, nil
+		}
+		return *a, a.replaceSession(entry.target, entry.name)
+	}
+	return *a, nil
+}
+
+func (a *app) replaceSession(endpoint sbx.Endpoint, name string) tea.Cmd {
+	if a.session != nil {
+		a.session.Close()
+		a.session = nil
+	}
+	session, err := sbx.NewSession(endpoint)
+	if err != nil {
+		_, command := a.withNotice(err.Error(), true)
+		return command
+	}
+	a.endpoint = endpoint
+	a.name = name
+	a.session = session
+	a.connState = sbx.StateConnecting
+	a.connAttempt = 0
+	a.connErr = nil
+	a.info = sbx.ServerInfo{}
+	a.status = sbx.Status{}
+	a.mode = ""
+	a.modes = nil
+	a.filters = [3]string{}
+	a.filter.SetValue("")
+	a.filter.Blur()
+	a.proxies.reset()
+	a.proxies.setClient(session.Client())
+	a.overlay = overlayNone
+	session.Start()
+	a.syncStreams()
+	return waitSession(session)
+}
+
+func (a *app) cycleMode() tea.Cmd {
+	if a.session == nil || len(a.modes) == 0 {
+		return nil
+	}
+	next := 0
+	for i, mode := range a.modes {
+		if strings.EqualFold(mode, a.mode) {
+			next = (i + 1) % len(a.modes)
+			break
+		}
+	}
+	mode := a.modes[next]
+	client := a.session.Client()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := client.SetClashMode(ctx, mode)
+		return actionMsg{notice: "mode " + mode, err: err}
+	}
+}
+
+func (a *app) setActive(active int) tea.Cmd {
+	wasProxies := a.active == 0
+	a.active = active
+	a.filter.SetValue(a.filters[active])
+	a.currentWorkspace().setFilter(a.filters[active])
+	a.syncStreams()
+	if active == 0 && !wasProxies && !a.proxyTicking {
+		a.proxyTicking = true
+		return proxyTick()
+	}
+	return nil
+}
+
+func (a *app) syncStreams() {
+	if a.session == nil {
+		return
+	}
+	a.session.SetStream(sbx.StreamOutbounds, a.active == 0 && a.proxies.needsOutbounds())
+	a.session.SetStream(sbx.StreamConnections, a.active == 1)
+	a.session.SetStream(sbx.StreamLogs, a.active == 2)
+}
+
+func (a *app) selectActiveTarget() {
+	entries := targetEntries(a.file, a.name, a.endpoint)
+	a.targetCursor.setCount(len(entries))
+	for i, entry := range entries {
+		if entry.active {
+			a.targetCursor.index = i
+			return
+		}
+	}
+}
+
+func (a *app) currentWorkspace() workspace {
+	switch a.active {
+	case 1:
+		return &a.connections
+	case 2:
+		return &a.logs
+	default:
+		return &a.proxies
+	}
+}
+
+func (a *app) resizeWorkspaces() {
+	height := max(0, a.height-3)
+	a.proxies.setSize(a.width, height)
+	a.connections.setSize(a.width, height)
+	a.logs.setSize(a.width, height)
+}
+
+func (a app) topBar() string {
+	target := a.name
+	if target == "" && a.endpoint.URL != "" {
+		target = "(url)"
+	}
+	if target == "" {
+		target = "sbxctl"
+	}
+	segments := []string{a.theme.accentText.Render(target)}
+	switch a.connState {
+	case sbx.StateConnected:
+		segments = append(segments, a.theme.badgeOK.Render("●")+" "+a.info.Version.Version)
+	case sbx.StateReconnecting:
+		segments = append(segments, a.theme.badgeWarn.Render("●")+" reconnecting ("+strconv.Itoa(a.connAttempt)+")")
+	case sbx.StateFailed:
+		message := "failed"
+		if a.connErr != nil {
+			message = a.connErr.Error()
+		}
+		segments = append(segments, a.theme.badgeBad.Render("●")+" "+message)
+	default:
+		segments = append(segments, a.theme.badgeWarn.Render("●")+" connecting")
+	}
+	if !a.info.StartedAt.IsZero() {
+		segments = append(segments, "up "+sbx.FormatDuration(time.Since(a.info.StartedAt)))
+	}
+	if a.mode != "" {
+		segments = append(segments, a.mode)
+	}
+	if a.status.TrafficAvailable {
+		segments = append(segments, "↑ "+sbx.FormatRate(a.status.Uplink)+" ↓ "+sbx.FormatRate(a.status.Downlink))
+	}
+	return fitLine(strings.Join(segments, "  "), a.width)
+}
+
+func (a app) tabs() string {
+	tabs := []string{"1 Proxies", "2 Connections", "3 Logs"}
+	if a.status.TrafficAvailable {
+		tabs[1] += " " + strconv.Itoa(a.status.ConnectionsIn)
+	}
+	for i := range tabs {
+		if i == a.active {
+			tabs[i] = a.theme.accentText.Render(tabs[i])
+		} else {
+			tabs[i] = a.theme.dimText.Render(tabs[i])
+		}
+	}
+	return fitLine(strings.Join(tabs, "   "), a.width)
+}
+
+func (a app) footer() string {
+	if a.filter.Focused() {
+		return fitLine(a.filter.View(), a.width)
+	}
+	if a.confirm != "" {
+		return fitLine(a.theme.badgeBad.Render(a.confirm+" (y/n)"), a.width)
+	}
+	parts := make([]string, 0)
+	bindings := a.currentWorkspace().bindings()
+	if len(bindings) > 4 {
+		bindings = bindings[:4]
+	}
+	bindings = append(bindings, a.keys.filter, a.keys.help)
+	for _, binding := range bindings {
+		help := binding.Help()
+		if help.Key != "" {
+			parts = append(parts, help.Key+" "+help.Desc)
+		}
+	}
+	left := strings.Join(parts, "  ")
+	right := ""
+	if a.notice.text != "" {
+		if a.notice.danger {
+			right = a.theme.badgeBad.Render(a.notice.text)
+		} else {
+			right = a.theme.badgeOK.Render(a.notice.text)
+		}
+	} else if a.active == 0 {
+		right = a.proxies.filterSummary()
+	}
+	if right == "" {
+		return fitLine(a.theme.dimText.Render(left), a.width)
+	}
+	rightWidth := lipgloss.Width(right)
+	left = ansi.Truncate(a.theme.dimText.Render(left), max(0, a.width-rightWidth-2), "")
+	gap := strings.Repeat(" ", max(2, a.width-lipgloss.Width(left)-rightWidth))
+	return fitLine(left+gap+right, a.width)
+}
+
+func (a *app) withNotice(text string, danger bool) (tea.Model, tea.Cmd) {
+	a.notice.id++
+	a.notice.text = text
+	a.notice.danger = danger
+	id := a.notice.id
+	return *a, tea.Tick(4*time.Second, func(time.Time) tea.Msg { return noticeExpiredMsg(id) })
+}
+
+func waitSession(session *sbx.Session) tea.Cmd {
+	return func() tea.Msg {
+		event, ok := <-session.Events()
+		return sessionEventMsg{session: session, event: event, ok: ok}
+	}
+}
+
+func proxyTick() tea.Cmd {
+	return tea.Tick(time.Second, func(now time.Time) tea.Msg { return proxyTickMsg(now) })
+}

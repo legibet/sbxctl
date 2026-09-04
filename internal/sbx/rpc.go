@@ -45,7 +45,7 @@ func (c *Client) StartedAt(ctx context.Context) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, rpcError(ctx, "get start time", err, false)
 	}
-	return unixSeconds(response.StartedAt), nil
+	return unixMilliseconds(response.StartedAt), nil
 }
 
 func (c *Client) DeprecatedWarnings(ctx context.Context) ([]DeprecatedWarning, error) {

@@ -8,6 +8,10 @@ import (
 	"github.com/legibet/sbxctl/internal/sbx"
 )
 
+// errNoTarget is returned when nothing selects an endpoint; the root command
+// uses it to open the TUI on the target picker instead of failing.
+var errNoTarget = &UsageError{Msg: "no target configured: use 'sbxctl target add' or pass --url"}
+
 type resolved struct {
 	Name    string
 	version sbx.Version
@@ -55,7 +59,7 @@ func resolveEndpoint(flags rootFlags, file *config.File) (resolved, error) {
 			return result, nil
 		}
 	}
-	return resolved{}, &UsageError{Msg: "no target configured: use 'sbxctl target add' or pass --url"}
+	return resolved{}, errNoTarget
 }
 
 func resolvedFromTarget(name string, target config.Target) resolved {

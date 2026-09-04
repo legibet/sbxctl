@@ -1,4 +1,4 @@
-package cli
+package sbx
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func formatBytes(value int64) string {
+func FormatBytes(value int64) string {
 	units := [...]string{"B", "KB", "MB", "GB", "TB"}
 	size := float64(value)
 	unit := 0
@@ -20,18 +20,18 @@ func formatBytes(value int64) string {
 	return fmt.Sprintf("%.1f %s", size, units[unit])
 }
 
-func formatRate(value int64) string {
-	return formatBytes(value) + "/s"
+func FormatRate(value int64) string {
+	return FormatBytes(value) + "/s"
 }
 
-func formatRelativeTime(value, now time.Time) string {
+func FormatAgo(value, now time.Time) string {
 	if value.IsZero() {
 		return "-"
 	}
-	return formatShortDuration(now.Sub(value)) + " ago"
+	return FormatShortDuration(now.Sub(value)) + " ago"
 }
 
-func formatShortDuration(duration time.Duration) string {
+func FormatShortDuration(duration time.Duration) string {
 	if duration < 0 {
 		duration = 0
 	}
@@ -47,7 +47,7 @@ func formatShortDuration(duration time.Duration) string {
 	}
 }
 
-func formatDuration(duration time.Duration) string {
+func FormatDuration(duration time.Duration) string {
 	if duration < time.Minute {
 		return fmt.Sprintf("%ds", int64(duration/time.Second))
 	}

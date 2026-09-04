@@ -105,16 +105,16 @@ func writeConnectionsTable(cmd *cobra.Command, connections []sbx.Connection, sta
 			age = connection.ClosedAt.Sub(connection.CreatedAt)
 		}
 		t.Row(shortID(connection.ID), connection.Inbound, connection.Source, destination, connection.Outbound,
-			formatRateOrTotal(up, state), formatRateOrTotal(down, state), formatShortDuration(age))
+			formatRateOrTotal(up, state), formatRateOrTotal(down, state), sbx.FormatShortDuration(age))
 	}
 	return t.Flush()
 }
 
 func formatRateOrTotal(value int64, state string) string {
 	if state == "active" {
-		return formatRate(value)
+		return sbx.FormatRate(value)
 	}
-	return formatBytes(value)
+	return sbx.FormatBytes(value)
 }
 
 func shortID(id string) string {
@@ -243,10 +243,10 @@ func writeConnectionTable(cmd *cobra.Command, connection sbx.Connection) error {
 	t.Row("from outbound:", connection.FromOutbound)
 	t.Row("created at:", connection.CreatedAt.Format(time.RFC3339Nano))
 	t.Row("closed at:", formatTime(connection.ClosedAt))
-	t.Row("uplink:", formatRate(connection.Uplink))
-	t.Row("downlink:", formatRate(connection.Downlink))
-	t.Row("uplink total:", formatBytes(connection.UplinkTotal))
-	t.Row("downlink total:", formatBytes(connection.DownlinkTotal))
+	t.Row("uplink:", sbx.FormatRate(connection.Uplink))
+	t.Row("downlink:", sbx.FormatRate(connection.Downlink))
+	t.Row("uplink total:", sbx.FormatBytes(connection.UplinkTotal))
+	t.Row("downlink total:", sbx.FormatBytes(connection.DownlinkTotal))
 	t.Row("rule:", connection.Rule)
 	t.Row("outbound:", connection.Outbound)
 	t.Row("outbound type:", connection.OutboundType)
