@@ -15,13 +15,13 @@ import (
 )
 
 type rootFlags struct {
-	Target    string
+	Server    string
 	URL       string
 	Secret    string
 	Output    string
 	Timeout   time.Duration
 	NoColor   bool
-	targetSet bool
+	serverSet bool
 	urlSet    bool
 	secretSet bool
 }
@@ -40,7 +40,7 @@ func newRootCommand() *cobra.Command {
 			return nil
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			flags.targetSet = cmd.Flags().Changed("target")
+			flags.serverSet = cmd.Flags().Changed("server")
 			flags.urlSet = cmd.Flags().Changed("url")
 			flags.secretSet = cmd.Flags().Changed("secret")
 			switch flags.Output {
@@ -57,7 +57,7 @@ func newRootCommand() *cobra.Command {
 			}
 			endpoint, err := resolveEndpoint(*flags, file)
 			if err != nil {
-				if errors.Is(err, errNoTarget) && len(file.Targets) > 0 {
+				if errors.Is(err, errNoServer) {
 					return ui.Run(sbx.Endpoint{}, "", file, flags.NoColor)
 				}
 				return err
@@ -71,7 +71,7 @@ func newRootCommand() *cobra.Command {
 		return &UsageError{Msg: err.Error()}
 	})
 
-	root.PersistentFlags().StringVar(&flags.Target, "target", "", "Use a saved target")
+	root.PersistentFlags().StringVar(&flags.Server, "server", "", "Use a saved server for this invocation")
 	root.PersistentFlags().StringVar(&flags.URL, "url", "", "Connect to an API URL")
 	root.PersistentFlags().StringVar(&flags.Secret, "secret", "", "Authenticate with a secret")
 	root.PersistentFlags().StringVar(&flags.Output, "output", "table", "Output format: table, json, or jsonl")
@@ -79,7 +79,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().BoolVar(&flags.NoColor, "no-color", false, "Disable color output")
 
 	root.AddCommand(
-		newTargetCommand(flags),
+		newServerCommand(flags),
 		newStatusCommand(flags),
 		newGroupsCommand(flags),
 		newOutboundsCommand(flags),

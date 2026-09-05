@@ -1,6 +1,6 @@
 # sbxctl design notes
 
-How sbxctl is put together, and what the sing-box API service actually does. Usage is in the [README](README.md).
+How sbxctl is put together, and what the sing-box API service actually does.
 
 sbxctl manages a running instance. The remote API registers an attached `StartedService`, which exposes no configuration or process lifecycle RPCs, so runtime state is all there is to manage.
 
@@ -55,11 +55,11 @@ Errors become `sbx.Error` carrying a `Kind`: Remote, Connect, Auth, Timeout, Uns
 
 ### Session
 
-One `sbx.Session` per target owns the `grpc.ClientConn`, a root context and every stream goroutine, and reports to the TUI through a single event channel. The CLI skips it and calls `sbx.Client` directly for a snapshot or a stream.
+One `sbx.Session` for the active server owns the `grpc.ClientConn`, a root context and every stream goroutine, and reports to the TUI through a single event channel. The CLI skips it and calls `sbx.Client` directly for a snapshot or a stream.
 
 ServiceStatus, Status, Groups and ClashMode run for the life of the session, ServiceStatus doubling as the heartbeat. Outbounds, Connections and Logs start and stop with the workspace that needs them. ClashMode stops for good on NotFound.
 
-Each stream reconnects on its own, backing off from 1s to a 10s ceiling. An auth failure or a version mismatch moves the session to Failed without retrying. Switching targets cancels the old context, waits for its goroutines, then builds a new session and clears every workspace.
+Each stream reconnects on its own, backing off from 1s to a 10s ceiling. An auth failure or a version mismatch moves the session to Failed without retrying. Switching servers cancels the old context, waits for its goroutines, then builds a new session and clears every workspace.
 
 ### Generated code
 
@@ -71,13 +71,13 @@ Protobuf keeps working as upstream adds fields. New RPCs get synced when sbxctl 
 
 ## TUI
 
-Keys follow nvim and yazi: single keystrokes for common actions, and no modes beyond filter input and confirmation. `internal/ui/keys.go` holds the bindings, and the `?` overlay is built from the bindings of the focused workspace, so the two cannot drift apart.
+Keys follow nvim and yazi: single keystrokes for common actions, with text input in filters and the server form. `internal/ui/keys.go` holds global and workspace bindings, and the `?` overlay is built from the bindings of the focused workspace. The server manager displays its own contextual keys.
 
 Proxies, Connections and Logs each implement `workspace` (`setSize`, `handleKey`, `setFilter`, `tick`, `view`, `bindings`). Keys dispatch in a fixed order: confirmation, overlay, filter, global, workspace.
 
 ### Frame
 
-The top bar carries target name, connection dot, version, uptime, Clash mode, rates and live connection count, dropping the traffic fields when the server has none. A tab row and a footer take one line each. Filtering, confirmation and messages borrow the footer rather than opening a window. Help, connection details and the target picker are centered overlays, the only places that draw a border.
+The top bar carries server name, connection dot, version, uptime, Clash mode, rates and live connection count, dropping the traffic fields when the server has none. A tab row and a footer take one line each. Filtering, workspace confirmation and messages borrow the footer rather than opening a window. Help, connection details and the server manager are centered overlays, the only places that draw a border. The manager's list, form and confirmations share one fixed-width frame.
 
 Each workspace emits exactly `width` by `height` cells through `exactLines` and renders only the rows inside the viewport. 80x24 is the floor, below which the app shows a message instead. Proxies splits into two panes at 100 columns and above, the left one taking a third.
 
@@ -87,7 +87,13 @@ Roles map onto the terminal's 16 ANSI colors in `internal/ui/theme.go`: blue for
 
 ### Data
 
-Proxies marks an outbound `testing` after triggering a test, until the stream updates it or 10 seconds pass, and shows a selection once the stream reports it rather than when the call returns. Connections keeps 1000 closed entries, Logs 5000 lines against the server's 3000 of history. While reconnecting, the top bar shows a yellow dot and the attempt count; after an auth failure it stops retrying and asks for a different target.
+Proxies marks an outbound `testing` after triggering a test, until the stream updates it or 10 seconds pass, and shows a selection once the stream reports it rather than when the call returns. Connections keeps 1000 closed entries, Logs 5000 lines against the server's 3000 of history. While reconnecting, the top bar shows a yellow dot and the attempt count; after an auth failure it stops retrying, and the server manager remains available for editing or switching.
+
+### Servers
+
+`internal/ui/servers.go` persists server records before changing the active session, so write failures leave the running connection intact. Explicit selection updates `current`; saving alone and invocation overrides preserve it. Renaming its record updates the remembered name.
+
+Changing the active server's connection settings reconnects; renaming does not. Deleting its record disconnects and clears the workspaces without selecting a replacement.
 
 ### Width
 

@@ -12,21 +12,21 @@ go install ./cmd/sbxctl
 
 ## Quick start
 
-Add a target:
-
-```sh
-sbxctl target add home http://127.0.0.1:9090 --secret <secret>
-```
-
-Open the TUI:
+Open the TUI and add your sing-box API server:
 
 ```sh
 sbxctl
 ```
 
-Press `?` for the keys of the focused workspace.
+Press `Ctrl+T` to connect, add, edit or delete saved servers. Press `?` for the keys of the focused workspace.
 
-`--url` and `--secret` connect without saving a target. Saved targets go to `~/.config/sbxctl/config.toml`.
+You can also add a server from the CLI:
+
+```sh
+sbxctl server add home http://127.0.0.1:9090 --secret <secret>
+```
+
+`--server <name>` selects a saved server for one invocation. `--url` and `--secret` connect without saving a server. Saved servers go to `~/.config/sbxctl/config.toml`.
 
 ## Commands
 

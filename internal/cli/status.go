@@ -13,7 +13,7 @@ import (
 )
 
 type statusOutput struct {
-	Target     string                  `json:"target"`
+	Server     string                  `json:"server"`
 	URL        string                  `json:"url"`
 	Version    string                  `json:"version"`
 	APIVersion int                     `json:"api_version"`
@@ -63,7 +63,7 @@ func newStatusCommand(flags *rootFlags) *cobra.Command {
 				return err
 			}
 			base := statusOutput{
-				Target:     endpoint.Name,
+				Server:     endpoint.Name,
 				URL:        endpoint.URL,
 				Version:    endpoint.version.Version,
 				APIVersion: endpoint.version.APIVersion,
@@ -103,11 +103,11 @@ func newStatusCommand(flags *rootFlags) *cobra.Command {
 
 func writeStatusTable(cmd *cobra.Command, output statusOutput) error {
 	t := newTable(cmd.OutOrStdout(), left(""), left(""))
-	target := output.URL
-	if output.Target != "" {
-		target = fmt.Sprintf("%s (%s)", output.Target, output.URL)
+	server := output.URL
+	if output.Server != "" {
+		server = fmt.Sprintf("%s (%s)", output.Server, output.URL)
 	}
-	t.Row("target:", target)
+	t.Row("server:", server)
 	t.Row("version:", fmt.Sprintf("%s (api %d)", output.Version, output.APIVersion))
 	uptime := "-"
 	if !output.StartedAt.IsZero() {

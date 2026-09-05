@@ -5,8 +5,38 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
+
+func TestLoadRejectsUnknownFieldsWithoutExposingValues(t *testing.T) {
+	const secret = "private-config-value"
+	for _, document := range []string{
+		"[targets.home]\nurl = 'http://localhost:9090'\nsecret = '" + secret + "'\n",
+		"[servers.home]\nurl = 'http://localhost:9090'\nsecret = '" + secret + "'\nunknown = '" + secret + "'\n",
+	} {
+		t.Run(strings.SplitN(document, "\n", 2)[0], func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			path, err := Path()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			file, err := Load()
+			if err == nil || file != nil {
+				t.Fatal("unknown fields produced a usable configuration")
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Fatal("configuration error exposed a field value")
+			}
+		})
+	}
+}
 
 func TestRoundTrip(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -15,13 +45,13 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if missing.Targets == nil {
-		t.Fatal("missing config has nil Targets")
+	if missing.Servers == nil {
+		t.Fatal("missing config has nil Servers")
 	}
 
 	want := &File{
 		Current: "home",
-		Targets: map[string]Target{
+		Servers: map[string]Server{
 			"work": {URL: "https://api.example.com", TLS: TLS{ServerName: "server.example.com", Insecure: true}},
 			"home": {URL: "http://127.0.0.1:9090", Secret: "secret", TLS: TLS{CAFile: "/path/ca.pem"}},
 		},

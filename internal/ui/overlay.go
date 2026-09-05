@@ -5,10 +5,6 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-
-	"github.com/legibet/sbxctl/internal/config"
-	"github.com/legibet/sbxctl/internal/sbx"
 )
 
 type overlayKind int
@@ -16,16 +12,9 @@ type overlayKind int
 const (
 	overlayNone overlayKind = iota
 	overlayHelp
-	overlayTargets
+	overlayServers
 	overlayConnection
 )
-
-type targetEntry struct {
-	name   string
-	url    string
-	target sbx.Endpoint
-	active bool
-}
 
 func renderOverlay(title, content string, width, height int, t theme) string {
 	contentLines := strings.Split(content, "\n")
@@ -73,53 +62,4 @@ func helpOverlay(keys keyMap, workspace []key.Binding, modeAvailable bool, width
 		lines = append(lines, cell(left, leftWidth, false)+"    "+cell(right, rightWidth, false))
 	}
 	return renderOverlay("Help", strings.Join(lines, "\n"), width, height, t)
-}
-
-func targetEntries(file *config.File, activeName string, activeEndpoint sbx.Endpoint) []targetEntry {
-	entries := make([]targetEntry, 0, len(file.Targets)+1)
-	if activeName == "" && activeEndpoint.URL != "" {
-		entries = append(entries, targetEntry{name: "(url)", url: activeEndpoint.URL, target: activeEndpoint, active: true})
-	}
-	for _, name := range file.Names() {
-		target := file.Targets[name]
-		entries = append(entries, targetEntry{
-			name: name,
-			url:  target.URL,
-			target: sbx.Endpoint{
-				URL:        target.URL,
-				Secret:     target.Secret,
-				CAFile:     target.TLS.CAFile,
-				ServerName: target.TLS.ServerName,
-				Insecure:   target.TLS.Insecure,
-			},
-			active: name == activeName,
-		})
-	}
-	return entries
-}
-
-func targetsOverlay(entries []targetEntry, selected cursor, width, height int, t theme) string {
-	if len(entries) == 0 {
-		return renderOverlay("Targets", "No targets. Add one with: sbxctl target add <name> <url>", width, height, t)
-	}
-	selected.setCount(len(entries))
-	start, end := selected.visible()
-	nameWidth := 0
-	for _, entry := range entries {
-		nameWidth = max(nameWidth, lipgloss.Width(entry.name))
-	}
-	lines := make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		entry := entries[i]
-		marker := "  "
-		if entry.active {
-			marker = t.accentText.Render("● ")
-		}
-		line := marker + cell(entry.name, nameWidth, false) + "  " + entry.url
-		if i == selected.index {
-			line = t.focusedRow.Render(ansi.Strip(line))
-		}
-		lines = append(lines, line)
-	}
-	return renderOverlay("Targets", strings.Join(lines, "\n"), width, height, t)
 }

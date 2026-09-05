@@ -13,11 +13,13 @@ func Run(ep sbx.Endpoint, name string, file *config.File, noColor bool) error {
 	var err error
 	if ep.URL != "" {
 		session, err = sbx.NewSession(ep)
-		if err != nil {
-			return err
-		}
 	}
 	model := newApp(ep, name, file, session)
+	if err != nil {
+		model.connState = sbx.StateFailed
+		model.connErr = err
+		model.serverError = err.Error()
+	}
 	options := []tea.ProgramOption{}
 	if noColor {
 		options = append(options, tea.WithColorProfile(colorprofile.Ascii))

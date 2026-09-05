@@ -1,10 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -15,7 +18,7 @@ type TLS struct {
 	Insecure   bool   `toml:"insecure,omitempty"`
 }
 
-type Target struct {
+type Server struct {
 	URL    string `toml:"url"`
 	Secret string `toml:"secret,omitempty"`
 	TLS    TLS    `toml:"tls,omitempty"`
@@ -23,7 +26,7 @@ type Target struct {
 
 type File struct {
 	Current string            `toml:"current,omitempty"`
-	Targets map[string]Target `toml:"targets"`
+	Servers map[string]Server `toml:"servers"`
 }
 
 func Path() (string, error) {
@@ -41,18 +44,25 @@ func Load() (*File, error) {
 	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return &File{Targets: make(map[string]Target)}, nil
+		return &File{Servers: make(map[string]Server)}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	var file File
-	if err := toml.Unmarshal(data, &file); err != nil {
-		return nil, err
+	if err := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields().Decode(&file); err != nil {
+		if unknown, ok := errors.AsType[*toml.StrictMissingError](err); ok {
+			keys := make([]string, 0, len(unknown.Errors))
+			for _, field := range unknown.Errors {
+				keys = append(keys, strings.Join(field.Key(), "."))
+			}
+			return nil, fmt.Errorf("read %s: unknown fields %s; use current and [servers.<name>] with url, secret and tls settings", path, strings.Join(keys, ", "))
+		}
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	if file.Targets == nil {
-		file.Targets = make(map[string]Target)
+	if file.Servers == nil {
+		file.Servers = make(map[string]Server)
 	}
 	return &file, nil
 }
@@ -93,8 +103,8 @@ func (f *File) Save() error {
 }
 
 func (f *File) Names() []string {
-	names := make([]string, 0, len(f.Targets))
-	for name := range f.Targets {
+	names := make([]string, 0, len(f.Servers))
+	for name := range f.Servers {
 		names = append(names, name)
 	}
 	sort.Strings(names)

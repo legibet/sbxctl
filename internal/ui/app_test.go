@@ -97,7 +97,7 @@ func TestUnicodeModeReportRepaintsScreen(t *testing.T) {
 func TestAppViewDimensions(t *testing.T) {
 	for _, size := range []struct{ width, height int }{{80, 24}, {140, 40}} {
 		t.Run(strconv.Itoa(size.width), func(t *testing.T) {
-			a := newApp(sbx.Endpoint{URL: "http://127.0.0.1:9090"}, "home", &config.File{Targets: map[string]config.Target{}}, nil)
+			a := newApp(sbx.Endpoint{URL: "http://127.0.0.1:9090"}, "home", &config.File{Servers: map[string]config.Server{}}, nil)
 			a.overlay = overlayNone
 			a.info = sbx.ServerInfo{Version: sbx.Version{Version: "1.14.0", APIVersion: 4}, StartedAt: time.Now().Add(-time.Hour)}
 			a.connState = sbx.StateConnected

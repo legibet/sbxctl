@@ -8,9 +8,8 @@ import (
 	"github.com/legibet/sbxctl/internal/sbx"
 )
 
-// errNoTarget is returned when nothing selects an endpoint; the root command
-// uses it to open the TUI on the target picker instead of failing.
-var errNoTarget = &UsageError{Msg: "no target configured: use 'sbxctl target add' or pass --url"}
+// The root command opens the server manager when no endpoint is selected.
+var errNoServer = &UsageError{Msg: "no server selected: use 'sbxctl server use <name>', add one with 'sbxctl server add', or pass --url"}
 
 type resolved struct {
 	Name    string
@@ -19,23 +18,23 @@ type resolved struct {
 }
 
 func resolveEndpoint(flags rootFlags, file *config.File) (resolved, error) {
-	if flags.urlSet && flags.targetSet {
-		return resolved{}, &UsageError{Msg: "--url and --target cannot be used together"}
+	if flags.urlSet && flags.serverSet {
+		return resolved{}, &UsageError{Msg: "--url and --server cannot be used together"}
 	}
 	if flags.urlSet {
 		return resolved{URL: flags.URL, Secret: flags.Secret}, nil
 	}
 
-	targetName := flags.Target
-	if !flags.targetSet {
-		targetName = os.Getenv("SBXCTL_TARGET")
+	serverName := flags.Server
+	if !flags.serverSet {
+		serverName = os.Getenv("SBXCTL_SERVER")
 	}
-	if flags.targetSet || targetName != "" {
-		target, ok := file.Targets[targetName]
+	if flags.serverSet || serverName != "" {
+		server, ok := file.Servers[serverName]
 		if !ok {
-			return resolved{}, &UsageError{Msg: fmt.Sprintf("unknown target %q", targetName)}
+			return resolved{}, &UsageError{Msg: fmt.Sprintf("unknown server %q", serverName)}
 		}
-		result := resolvedFromTarget(targetName, target)
+		result := resolvedFromServer(serverName, server)
 		if flags.secretSet {
 			result.Secret = flags.Secret
 		}
@@ -51,24 +50,24 @@ func resolveEndpoint(flags rootFlags, file *config.File) (resolved, error) {
 	}
 
 	if file.Current != "" {
-		if target, ok := file.Targets[file.Current]; ok {
-			result := resolvedFromTarget(file.Current, target)
+		if server, ok := file.Servers[file.Current]; ok {
+			result := resolvedFromServer(file.Current, server)
 			if flags.secretSet {
 				result.Secret = flags.Secret
 			}
 			return result, nil
 		}
 	}
-	return resolved{}, errNoTarget
+	return resolved{}, errNoServer
 }
 
-func resolvedFromTarget(name string, target config.Target) resolved {
+func resolvedFromServer(name string, server config.Server) resolved {
 	return resolved{
 		Name:       name,
-		URL:        target.URL,
-		Secret:     target.Secret,
-		CAFile:     target.TLS.CAFile,
-		ServerName: target.TLS.ServerName,
-		Insecure:   target.TLS.Insecure,
+		URL:        server.URL,
+		Secret:     server.Secret,
+		CAFile:     server.TLS.CAFile,
+		ServerName: server.TLS.ServerName,
+		Insecure:   server.TLS.Insecure,
 	}
 }

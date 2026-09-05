@@ -63,7 +63,10 @@ type app struct {
 	keys          keyMap
 	active        int
 	overlay       overlayKind
-	targetCursor  cursor
+	serverCursor  cursor
+	serverForm    *serverForm
+	serverDelete  *serverEntry
+	serverError   string
 	filter        textinput.Model
 	filters       [3]string
 	confirm       *confirmMsg
@@ -84,7 +87,7 @@ type app struct {
 
 func newApp(ep sbx.Endpoint, name string, file *config.File, session *sbx.Session) app {
 	if file == nil {
-		file = &config.File{Targets: make(map[string]config.Target)}
+		file = &config.File{Servers: make(map[string]config.Server)}
 	}
 	t := newTheme()
 	keys := newKeyMap()
@@ -109,7 +112,7 @@ func newApp(ep sbx.Endpoint, name string, file *config.File, session *sbx.Sessio
 	a.connections = newConnections(t, keys, client)
 	a.logs = newLogs(t, keys, client)
 	if session == nil {
-		a.overlay = overlayTargets
+		a.overlay = overlayServers
 	}
 	return a
 }
@@ -129,7 +132,10 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		a.width, a.height = msg.Width, msg.Height
 		a.resizeWorkspaces()
 		a.filter.SetWidth(max(1, a.width-1))
-		a.targetCursor.setHeight(max(1, a.height-8))
+		a.serverCursor.setHeight(a.serverBodyHeight() - 2)
+		if a.serverForm != nil {
+			a.serverForm.setWidth(a.serverWidth())
+		}
 		return a, nil
 	case tea.ModeReportMsg:
 		// Bubble Tea switches to grapheme-cluster widths (mode 2027) once the
@@ -170,6 +176,10 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return a.withNotice(msg.notice, false)
 	}
 
+	if a.overlay == overlayServers && a.serverForm != nil {
+		command := a.handleServerForm(message)
+		return a, command
+	}
 	msg, ok := message.(tea.KeyPressMsg)
 	if !ok {
 		return a, nil
@@ -215,9 +225,8 @@ func (a app) View() tea.View {
 		switch a.overlay {
 		case overlayHelp:
 			workspaceView = helpOverlay(a.keys, a.currentWorkspace().bindings(), len(a.modes) > 0, a.width, a.height-3, a.theme)
-		case overlayTargets:
-			entries := targetEntries(a.file, a.name, a.endpoint)
-			workspaceView = targetsOverlay(entries, a.targetCursor, a.width, a.height-3, a.theme)
+		case overlayServers:
+			workspaceView = a.serversView()
 		case overlayConnection:
 			detail := a.connections.detailView(max(1, a.width-8), max(1, a.height-7))
 			workspaceView = renderOverlay("Connection", detail, a.width, a.height-3, a.theme)
@@ -299,9 +308,10 @@ func (a *app) handleGlobal(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case key.Matches(msg, a.keys.help):
 		a.overlay = overlayHelp
 		return nil, true
-	case key.Matches(msg, a.keys.targets):
-		a.overlay = overlayTargets
-		a.selectActiveTarget()
+	case key.Matches(msg, a.keys.servers):
+		a.overlay = overlayServers
+		a.serverError = ""
+		a.selectActiveServer()
 		return nil, true
 	case key.Matches(msg, a.keys.reconnect):
 		if a.session != nil && a.connState != sbx.StateFailed {
@@ -368,42 +378,40 @@ func (a *app) handleOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return *a, nil
 	}
-	if k == "esc" || k == "q" {
-		a.overlay = overlayNone
-		return *a, nil
-	}
-	if k == "ctrl+c" {
-		return *a, tea.Quit
-	}
-	entries := targetEntries(a.file, a.name, a.endpoint)
-	a.targetCursor.setCount(len(entries))
-	if a.targetCursor.handleKey(k) {
-		return *a, nil
-	}
-	if k == "enter" && len(entries) > 0 {
-		entry := entries[a.targetCursor.index]
-		if entry.active {
-			a.overlay = overlayNone
-			return *a, nil
-		}
-		return *a, a.replaceSession(entry.target, entry.name)
-	}
-	return *a, nil
+	command := a.handleServers(k)
+	return *a, command
 }
 
 func (a *app) replaceSession(endpoint sbx.Endpoint, name string) tea.Cmd {
+	a.disconnect()
+	a.endpoint = endpoint
+	a.name = name
+	session, err := sbx.NewSession(endpoint)
+	if err != nil {
+		a.connState = sbx.StateFailed
+		a.connErr = err
+		a.serverError = err.Error()
+		_, command := a.withNotice(err.Error(), true)
+		return command
+	}
+	a.session = session
+	a.serverError = ""
+	a.proxies.setClient(session.Client())
+	a.connections.setClient(session.Client())
+	a.logs.setClient(session.Client())
+	a.overlay = overlayNone
+	session.Start()
+	a.syncStreams()
+	return waitSession(session)
+}
+
+func (a *app) disconnect() {
 	if a.session != nil {
 		a.session.Close()
 		a.session = nil
 	}
-	session, err := sbx.NewSession(endpoint)
-	if err != nil {
-		_, command := a.withNotice(err.Error(), true)
-		return command
-	}
-	a.endpoint = endpoint
-	a.name = name
-	a.session = session
+	a.endpoint = sbx.Endpoint{}
+	a.name = ""
 	a.connState = sbx.StateConnecting
 	a.connAttempt = 0
 	a.connErr = nil
@@ -415,15 +423,11 @@ func (a *app) replaceSession(endpoint sbx.Endpoint, name string) tea.Cmd {
 	a.filter.SetValue("")
 	a.filter.Blur()
 	a.proxies.reset()
-	a.proxies.setClient(session.Client())
+	a.proxies.setClient(nil)
 	a.connections.reset()
-	a.connections.setClient(session.Client())
+	a.connections.setClient(nil)
 	a.logs.reset()
-	a.logs.setClient(session.Client())
-	a.overlay = overlayNone
-	session.Start()
-	a.syncStreams()
-	return waitSession(session)
+	a.logs.setClient(nil)
 }
 
 func (a *app) cycleMode() tea.Cmd {
@@ -463,12 +467,12 @@ func (a *app) syncStreams() {
 	a.session.SetStream(sbx.StreamLogs, a.active == 2)
 }
 
-func (a *app) selectActiveTarget() {
-	entries := targetEntries(a.file, a.name, a.endpoint)
-	a.targetCursor.setCount(len(entries))
+func (a *app) selectActiveServer() {
+	entries := a.serverEntries()
+	a.serverCursor.setCount(len(entries))
 	for i, entry := range entries {
 		if entry.active {
-			a.targetCursor.index = i
+			a.serverCursor.index = i
 			return
 		}
 	}
@@ -493,14 +497,14 @@ func (a *app) resizeWorkspaces() {
 }
 
 func (a app) topBar() string {
-	target := a.name
-	if target == "" && a.endpoint.URL != "" {
-		target = "(url)"
+	server := a.name
+	if server == "" && a.endpoint.URL != "" {
+		server = "Unsaved"
 	}
-	if target == "" {
-		target = "sbxctl"
+	if server == "" {
+		return fitLine(a.theme.accentText.Render("sbxctl")+"  No server selected", a.width)
 	}
-	segments := []string{a.theme.accentText.Render(target)}
+	segments := []string{a.theme.accentText.Render(server)}
 	switch a.connState {
 	case sbx.StateConnected:
 		segments = append(segments, a.theme.badgeOK.Render("●")+" "+a.info.Version.Version)
@@ -543,6 +547,9 @@ func (a app) tabs() string {
 }
 
 func (a app) footer() string {
+	if a.overlay == overlayServers {
+		return fitLine(a.theme.dimText.Render("Servers are saved locally. Switching remembers your choice."), a.width)
+	}
 	if a.filter.Focused() {
 		return fitLine(a.filter.View(), a.width)
 	}
@@ -554,7 +561,7 @@ func (a app) footer() string {
 	if len(bindings) > 4 {
 		bindings = bindings[:4]
 	}
-	bindings = append(bindings, a.keys.filter, a.keys.help)
+	bindings = append(bindings, a.keys.servers, a.keys.help)
 	for _, binding := range bindings {
 		help := binding.Help()
 		if help.Key != "" {

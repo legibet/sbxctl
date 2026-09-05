@@ -5,7 +5,7 @@ import "charm.land/bubbles/v2/key"
 type keyMap struct {
 	proxies, connections, logs  key.Binding
 	next, previous              key.Binding
-	filter, help, targets       key.Binding
+	filter, help, servers       key.Binding
 	reconnect, mode, quit       key.Binding
 	move, selectItem, details   key.Binding
 	test, testGroup             key.Binding
@@ -23,7 +23,7 @@ func newKeyMap() keyMap {
 		previous:    key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "previous workspace")),
 		filter:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
-		targets:     key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "targets")),
+		servers:     key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "servers")),
 		reconnect:   key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reconnect")),
 		mode:        key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "cycle mode")),
 		quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -48,7 +48,7 @@ func newKeyMap() keyMap {
 func globalBindings(keys keyMap, modeAvailable bool) []key.Binding {
 	bindings := []key.Binding{
 		keys.proxies, keys.connections, keys.logs, keys.next, keys.previous,
-		keys.filter, keys.help, keys.targets, keys.reconnect,
+		keys.filter, keys.help, keys.servers, keys.reconnect,
 	}
 	if modeAvailable {
 		bindings = append(bindings, keys.mode)
