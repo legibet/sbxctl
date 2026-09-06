@@ -93,6 +93,8 @@ func Dial(ep Endpoint) (*Client, error) {
 	auth := authInterceptor{secret: ep.Secret}
 	conn, err := grpc.NewClient(
 		target,
+		// API endpoints do not use DNS service configs; skip the extra TXT lookup.
+		grpc.WithDisableServiceConfig(),
 		grpc.WithTransportCredentials(transport),
 		grpc.WithChainUnaryInterceptor(auth.unary),
 		grpc.WithChainStreamInterceptor(auth.stream),
