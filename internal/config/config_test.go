@@ -17,6 +17,8 @@ func TestLoadRejectsUnknownFieldsWithoutExposingValues(t *testing.T) {
 	} {
 		t.Run(strings.SplitN(document, "\n", 2)[0], func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("AppData", t.TempDir())
 			path, err := Path()
 			if err != nil {
 				t.Fatal(err)
@@ -40,6 +42,8 @@ func TestLoadRejectsUnknownFieldsWithoutExposingValues(t *testing.T) {
 
 func TestRoundTrip(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AppData", t.TempDir())
 
 	missing, err := Load()
 	if err != nil {

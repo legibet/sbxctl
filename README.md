@@ -26,7 +26,7 @@ You can also add a server from the CLI:
 sbxctl server add home http://127.0.0.1:9090 --secret <secret>
 ```
 
-`--server <name>` selects a saved server for one invocation. `--url` and `--secret` connect without saving a server. Saved servers go to `~/.config/sbxctl/config.toml`.
+`--server <name>` selects a saved server for one invocation. `--url` and `--secret` connect without saving a server.
 
 ## Commands
 

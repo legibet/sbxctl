@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/legibet/sbxctl/internal/config"
@@ -15,6 +16,8 @@ import (
 func newServerTestApp(t *testing.T) *app {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AppData", t.TempDir())
 	// Reserve a loopback endpoint; these state checks do not wait for RPCs.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -74,12 +77,19 @@ func TestServerWriteFailurePreservesState(t *testing.T) {
 			}
 			form := a.serverForm
 			// A regular file cannot be a config directory, even when tests run as root.
-			dir := os.Getenv("XDG_CONFIG_HOME")
+			env := "XDG_CONFIG_HOME"
+			switch runtime.GOOS {
+			case "darwin":
+				env = "HOME"
+			case "windows":
+				env = "AppData"
+			}
+			dir := os.Getenv(env)
 			path, err := config.Path()
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("XDG_CONFIG_HOME", path)
+			t.Setenv(env, path)
 			switch operation {
 			case "add", "edit":
 				a.saveServer(true)
@@ -88,7 +98,7 @@ func TestServerWriteFailurePreservesState(t *testing.T) {
 			case "select":
 				a.handleServers("enter")
 			}
-			t.Setenv("XDG_CONFIG_HOME", dir)
+			t.Setenv(env, dir)
 			assertSavedServers(t, before)
 			if !reflect.DeepEqual(a.file, before) || a.name != before.Current || a.endpoint != endpoint || a.session != session || !a.status.TrafficAvailable {
 				t.Fatal("failed write changed configuration or active session state")
@@ -109,6 +119,8 @@ func TestServerWriteFailurePreservesState(t *testing.T) {
 
 func TestSaveFirstServerDoesNotSelect(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AppData", t.TempDir())
 	a := newApp(sbx.Endpoint{}, "", nil, nil)
 	t.Cleanup(a.disconnect)
 	a.openServerForm(serverEntry{})
