@@ -293,45 +293,55 @@ type connectionColumns struct {
 	inbound, source, destination, rule, outbound, up, down, age int
 }
 
+// width is the total the columns occupy, two spaces between each. A column of
+// zero width is hidden.
+func (c connectionColumns) width() int {
+	total, count := 0, 0
+	for _, column := range []int{c.inbound, c.source, c.destination, c.rule, c.outbound, c.up, c.down, c.age} {
+		if column > 0 {
+			total += column
+			count++
+		}
+	}
+	return total + max(0, count-1)*2
+}
+
+// row lays the values out in the visible columns, in display order.
+func (c connectionColumns) row(inbound, source, destination, rule, outbound, up, down, age string) string {
+	parts := make([]string, 0, 8)
+	add := func(width int, text string, right bool) {
+		if width > 0 {
+			parts = append(parts, cell(text, width, right))
+		}
+	}
+	add(c.inbound, inbound, false)
+	add(c.source, source, false)
+	add(c.destination, destination, false)
+	add(c.rule, rule, false)
+	add(c.outbound, outbound, false)
+	add(c.up, up, true)
+	add(c.down, down, true)
+	add(c.age, age, true)
+	return strings.Join(parts, "  ")
+}
+
 func (w *connectionsWorkspace) columns() connectionColumns {
-	columns := connectionColumns{source: 22, destination: 16, outbound: 18, up: 10, down: 10, age: 6}
-	count := 6
-	if w.width >= 110 {
-		columns.inbound = 10
-		count++
+	c := connectionColumns{inbound: 10, source: 22, destination: 16, rule: 18, outbound: 16, up: 10, down: 10, age: 6}
+	// Narrow terminals drop columns in this order, least useful first. The
+	// destination always stays and takes whatever width is left over.
+	for _, column := range []*int{&c.rule, &c.inbound, &c.source, &c.up, &c.age, &c.down, &c.outbound} {
+		if c.width() <= w.width {
+			break
+		}
+		*column = 0
 	}
-	if w.width >= 130 {
-		columns.rule = 18
-		count++
-	}
-	fixed := columns.inbound + columns.source + columns.rule + columns.outbound + columns.up + columns.down + columns.age + (count-1)*2
-	columns.destination = max(16, w.width-fixed)
-	if overflow := fixed + columns.destination - w.width; overflow > 0 {
-		reduction := min(overflow, columns.source-16)
-		columns.source -= reduction
-		overflow -= reduction
-		columns.outbound -= min(overflow, columns.outbound-12)
-	}
-	return columns
+	c.destination += max(0, w.width-c.width())
+	return c
 }
 
 func (w *connectionsWorkspace) columnHeader() string {
-	c := w.columns()
-	parts := make([]string, 0, 8)
-	if c.inbound > 0 {
-		parts = append(parts, cell("INBOUND", c.inbound, false))
-	}
-	parts = append(parts, cell("SOURCE", c.source, false), cell("DESTINATION", c.destination, false))
-	if c.rule > 0 {
-		parts = append(parts, cell("RULE", c.rule, false))
-	}
-	parts = append(parts,
-		cell("OUTBOUND", c.outbound, false),
-		cell("UP", c.up, true),
-		cell("DOWN", c.down, true),
-		cell("AGE", c.age, true),
-	)
-	return fitLine(w.theme.dimText.Render(strings.Join(parts, "  ")), w.width)
+	row := w.columns().row("INBOUND", "SOURCE", "DESTINATION", "RULE", "OUTBOUND", "UP", "DOWN", "AGE")
+	return fitLine(w.theme.dimText.Render(row), w.width)
 }
 
 func (w *connectionsWorkspace) connectionRow(connection sbx.Connection) string {
@@ -348,21 +358,16 @@ func (w *connectionsWorkspace) connectionRow(connection sbx.Connection) string {
 	if !connection.ClosedAt.IsZero() {
 		age = connection.ClosedAt.Sub(connection.CreatedAt)
 	}
-	parts := make([]string, 0, 8)
-	if c.inbound > 0 {
-		parts = append(parts, cell(connection.Inbound, c.inbound, false))
-	}
-	parts = append(parts, cell(connection.Source, c.source, false), cell(destination, c.destination, false))
-	if c.rule > 0 {
-		parts = append(parts, w.theme.dimText.Render(cell(connection.Rule, c.rule, false)))
-	}
-	parts = append(parts,
-		cell(connection.Outbound, c.outbound, false),
-		cell(w.trafficValue(up), c.up, true),
-		cell(w.trafficValue(down), c.down, true),
-		cell(sbx.FormatShortDuration(age), c.age, true),
+	return c.row(
+		connection.Inbound,
+		connection.Source,
+		destination,
+		w.theme.dimText.Render(connection.Rule),
+		connection.Outbound,
+		w.trafficValue(up),
+		w.trafficValue(down),
+		sbx.FormatShortDuration(age),
 	)
-	return strings.Join(parts, "  ")
 }
 
 func (w *connectionsWorkspace) trafficValue(value int64) string {

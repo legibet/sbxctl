@@ -1,6 +1,10 @@
 package ui
 
-import "charm.land/bubbles/v2/key"
+import (
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+)
 
 type keyMap struct {
 	proxies, connections, logs  key.Binding
@@ -43,6 +47,15 @@ func newKeyMap() keyMap {
 		level:       key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "level")),
 		clear:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear")),
 	}
+}
+
+func bindingHints(bindings []key.Binding) string {
+	parts := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		help := binding.Help()
+		parts = append(parts, help.Key+" "+help.Desc)
+	}
+	return strings.Join(parts, "  ")
 }
 
 func globalBindings(keys keyMap, modeAvailable bool) []key.Binding {

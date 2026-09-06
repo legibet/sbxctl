@@ -2,11 +2,25 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/legibet/sbxctl/internal/sbx"
 )
+
+// Group tags are short and the outbounds they select are long, so the group
+// column must not claim half the pane by default.
+func TestGroupRowKeepsSelectedOutbound(t *testing.T) {
+	w := newProxies(newTheme(), newKeyMap(), nil)
+	w.setSize(46, 10)
+	w.setGroups([]sbx.Group{{Tag: "auto", Type: "urltest", Selected: "hk-01-premium-tokyo"}})
+	if view := ansi.Strip(w.view()); !strings.Contains(view, "hk-01-premium-tokyo") {
+		t.Fatalf("group row truncated the selected outbound:\n%s", view)
+	}
+}
 
 func TestProxiesSortingAndFiltering(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)

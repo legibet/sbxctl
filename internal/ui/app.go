@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -217,8 +218,8 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a app) View() tea.View {
 	var content string
-	if a.width < 80 || a.height < 24 {
-		content = lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, "terminal too small (80x24 minimum)")
+	if a.width < 46 || a.height < 14 {
+		content = lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, "terminal too small (46x14 minimum)")
 		content = exactLines(strings.Split(content, "\n"), a.width, a.height)
 	} else {
 		workspaceView := a.currentWorkspace().view()
@@ -504,31 +505,39 @@ func (a app) topBar() string {
 	if server == "" {
 		return fitLine(a.theme.accentText.Render("sbxctl")+"  No server selected", a.width)
 	}
-	segments := []string{a.theme.accentText.Render(server)}
+	var state string
 	switch a.connState {
 	case sbx.StateConnected:
-		segments = append(segments, a.theme.badgeOK.Render("●")+" "+a.info.Version.Version)
+		state = a.theme.badgeOK.Render("●") + " " + a.info.Version.Version
 	case sbx.StateReconnecting:
-		segments = append(segments, a.theme.badgeWarn.Render("●")+" reconnecting ("+strconv.Itoa(a.connAttempt)+")")
+		state = a.theme.badgeWarn.Render("●") + " reconnecting (" + strconv.Itoa(a.connAttempt) + ")"
 	case sbx.StateFailed:
 		message := "failed"
 		if a.connErr != nil {
 			message = a.connErr.Error()
 		}
-		segments = append(segments, a.theme.badgeBad.Render("●")+" "+message)
+		state = a.theme.badgeBad.Render("●") + " " + message
 	default:
-		segments = append(segments, a.theme.badgeWarn.Render("●")+" connecting")
+		state = a.theme.badgeWarn.Render("●") + " connecting"
 	}
+	// Uptime, mode and rates are dropped in that order when the bar does not fit.
+	optional := make([]string, 0, 3)
 	if !a.info.StartedAt.IsZero() {
-		segments = append(segments, "up "+sbx.FormatDuration(time.Since(a.info.StartedAt)))
+		optional = append(optional, "up "+sbx.FormatDuration(time.Since(a.info.StartedAt)))
 	}
 	if a.mode != "" {
-		segments = append(segments, a.mode)
+		optional = append(optional, a.mode)
 	}
 	if a.status.TrafficAvailable {
-		segments = append(segments, "↑ "+sbx.FormatRate(a.status.Uplink)+" ↓ "+sbx.FormatRate(a.status.Downlink))
+		optional = append(optional, "↑ "+sbx.FormatRate(a.status.Uplink)+" ↓ "+sbx.FormatRate(a.status.Downlink))
 	}
-	return fitLine(strings.Join(segments, "  "), a.width)
+	required := []string{a.theme.accentText.Render(server), state}
+	line := strings.Join(slices.Concat(required, optional), "  ")
+	for len(optional) > 0 && lipgloss.Width(line) > a.width {
+		optional = optional[1:]
+		line = strings.Join(slices.Concat(required, optional), "  ")
+	}
+	return fitLine(line, a.width)
 }
 
 func (a app) tabs() string {
@@ -548,7 +557,7 @@ func (a app) tabs() string {
 
 func (a app) footer() string {
 	if a.overlay == overlayServers {
-		return fitLine(a.theme.dimText.Render("Servers are saved locally. Switching remembers your choice."), a.width)
+		return fitLine(a.theme.dimText.Render(configPath()), a.width)
 	}
 	if a.filter.Focused() {
 		return fitLine(a.filter.View(), a.width)
@@ -556,19 +565,6 @@ func (a app) footer() string {
 	if a.confirm != nil {
 		return fitLine(a.theme.badgeBad.Render(a.confirm.question+" (y/n)"), a.width)
 	}
-	parts := make([]string, 0)
-	bindings := a.currentWorkspace().bindings()
-	if len(bindings) > 4 {
-		bindings = bindings[:4]
-	}
-	bindings = append(bindings, a.keys.servers, a.keys.help)
-	for _, binding := range bindings {
-		help := binding.Help()
-		if help.Key != "" {
-			parts = append(parts, help.Key+" "+help.Desc)
-		}
-	}
-	left := strings.Join(parts, "  ")
 	right := ""
 	if a.notice.text != "" {
 		if a.notice.danger {
@@ -579,12 +575,31 @@ func (a app) footer() string {
 	} else if a.active == 0 {
 		right = a.proxies.filterSummary()
 	}
+	budget := a.width
+	if right != "" {
+		budget = max(0, a.width-lipgloss.Width(right)-2)
+	}
+	// Workspace keys go first when the hints do not fit, then servers. Help
+	// always survives, because the help overlay lists every binding.
+	workspace := a.currentWorkspace().bindings()
+	if len(workspace) > 4 {
+		workspace = workspace[:4]
+	}
+	tail := []key.Binding{a.keys.servers, a.keys.help}
+	left := bindingHints(slices.Concat(workspace, tail))
+	for lipgloss.Width(left) > budget && (len(workspace) > 0 || len(tail) > 1) {
+		if len(workspace) > 0 {
+			workspace = workspace[:len(workspace)-1]
+		} else {
+			tail = tail[1:]
+		}
+		left = bindingHints(slices.Concat(workspace, tail))
+	}
 	if right == "" {
 		return fitLine(a.theme.dimText.Render(left), a.width)
 	}
-	rightWidth := lipgloss.Width(right)
-	left = ansi.Truncate(a.theme.dimText.Render(left), max(0, a.width-rightWidth-2), "")
-	gap := strings.Repeat(" ", max(2, a.width-lipgloss.Width(left)-rightWidth))
+	left = a.theme.dimText.Render(left)
+	gap := strings.Repeat(" ", max(2, a.width-lipgloss.Width(left)-lipgloss.Width(right)))
 	return fitLine(left+gap+right, a.width)
 }
 

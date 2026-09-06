@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 	"unicode"
@@ -353,13 +354,42 @@ func (a *app) saveServer(connect bool) tea.Cmd {
 	return nil
 }
 
-func (a app) serverWidth() int      { return min(68, max(1, a.width-8)) }
-func (a app) serverBodyHeight() int { return max(3, min(12, a.height-12)) }
+func (a app) serverWidth() int { return min(68, max(1, a.width-8)) }
+
+// The body sits above a blank line, two status lines and the hints, inside a
+// border, below the top bar, tabs and footer.
+func (a app) serverBodyHeight() int { return max(3, min(12, a.height-9)) }
+
+// configPath is the file the server manager writes, with the home directory
+// shortened so it stays readable in the footer.
+func configPath() string {
+	path, err := config.Path()
+	if err != nil {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if rest, ok := strings.CutPrefix(path, home+string(os.PathSeparator)); ok {
+		return "~" + string(os.PathSeparator) + rest
+	}
+	return path
+}
+
+// fitHints joins the hints, dropping them from the end until the line fits. The
+// last one always survives: it is how to leave the current view.
+func fitHints(hints []string, width int) string {
+	for len(hints) > 1 && lipgloss.Width(strings.Join(hints, "  ")) > width {
+		hints = slices.Delete(hints, len(hints)-2, len(hints)-1)
+	}
+	return strings.Join(hints, "  ")
+}
 
 func (a app) serversView() string {
 	w, h := a.serverWidth(), a.serverBodyHeight()
 	title := "Servers"
-	help := "Enter connect  a add  e edit  d delete  Esc back"
+	hints := []string{"Enter connect", "a add", "e edit", "d delete", "Esc back"}
 	status := a.serverError
 	statusStyle := a.theme.badgeBad
 	if f := a.serverForm; f != nil {
@@ -389,15 +419,15 @@ func (a app) serversView() string {
 			title = "Save server"
 		}
 		lines = f.view(w, h, a.theme)
-		help = "Tab next  Shift+Tab previous  Esc cancel"
+		hints = []string{"Tab next", "Shift+Tab previous", "Esc cancel"}
 		if f.focus == serverSecretField {
-			help = "Tab next  Ctrl+R show/hide secret  Esc cancel"
+			hints = []string{"Ctrl+R show/hide secret", "Tab next", "Esc cancel"}
 		}
 	} else {
 		entries := a.serverEntries()
 		if len(entries) == 0 {
 			lines = []string{"", a.theme.title.Render("No servers yet"), "", "Add an existing sing-box API server to get started.", "", a.theme.accentText.Render("a  Add server")}
-			help = "a add  Esc back  Ctrl+C quit"
+			hints = []string{"a add", "Esc back", "Ctrl+C quit"}
 		} else {
 			selected := a.serverCursor
 			selected.setHeight(h - 2)
@@ -421,7 +451,7 @@ func (a app) serversView() string {
 				if i == selected.index {
 					line = a.theme.focusedRow.Render(line)
 					if entry.name == "" {
-						help = "Enter connect  a add  e save  Esc back"
+						hints = []string{"Enter connect", "a add", "e save", "Esc back"}
 					}
 				} else if entry.active {
 					line = a.theme.accentText.Render(line)
@@ -444,7 +474,7 @@ func (a app) serversView() string {
 	if len(statusLines) < 2 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, a.theme.dimText.Render(help))
+	lines = append(lines, a.theme.dimText.Render(fitHints(hints, w)))
 	for i := range lines {
 		lines[i] = cell(lines[i], w, false)
 	}

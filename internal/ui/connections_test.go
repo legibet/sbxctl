@@ -46,6 +46,48 @@ func TestConnectionsApplySortFilterAndSelection(t *testing.T) {
 	assertConnectionOrder(t, w.rows, "charlie")
 }
 
+// The table is truncated to the terminal width when it is drawn, so columns
+// that overflow disappear silently. Check the widths themselves instead.
+func TestConnectionColumnsDropByPriority(t *testing.T) {
+	for _, want := range []struct {
+		width   int
+		columns string
+	}{
+		{46, "destination outbound down"},
+		{54, "destination outbound down age"},
+		{66, "destination outbound up down age"},
+		{90, "source destination outbound up down age"},
+		{102, "inbound source destination outbound up down age"},
+		{122, "inbound source destination rule outbound up down age"},
+	} {
+		c := (&connectionsWorkspace{width: want.width}).columns()
+		names := make([]string, 0, 8)
+		for _, column := range []struct {
+			name  string
+			width int
+		}{
+			{"inbound", c.inbound},
+			{"source", c.source},
+			{"destination", c.destination},
+			{"rule", c.rule},
+			{"outbound", c.outbound},
+			{"up", c.up},
+			{"down", c.down},
+			{"age", c.age},
+		} {
+			if column.width > 0 {
+				names = append(names, column.name)
+			}
+		}
+		if got := strings.Join(names, " "); got != want.columns {
+			t.Errorf("width %d: columns = %q, want %q", want.width, got, want.columns)
+		}
+		if c.width() != want.width {
+			t.Errorf("width %d: columns occupy %d", want.width, c.width())
+		}
+	}
+}
+
 func newConnectionEvent(connection sbx.Connection) sbx.ConnectionEvent {
 	return sbx.ConnectionEvent{Type: sbx.ConnectionNew, ID: connection.ID, Connection: &connection}
 }

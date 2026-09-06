@@ -18,6 +18,10 @@ const (
 
 func renderOverlay(title, content string, width, height int, t theme) string {
 	contentLines := strings.Split(content, "\n")
+	// Trim the content rather than the finished box, so the border stays closed.
+	if limit := max(0, height-2); len(contentLines) > limit {
+		contentLines = contentLines[:limit]
+	}
 	contentWidth := 0
 	for _, line := range contentLines {
 		contentWidth = max(contentWidth, lipgloss.Width(line))
@@ -38,28 +42,41 @@ func renderOverlay(title, content string, width, height int, t theme) string {
 
 func helpOverlay(keys keyMap, workspace []key.Binding, modeAvailable bool, width, height int, t theme) string {
 	global := globalBindings(keys, modeAvailable)
-	leftWidth, rightWidth := 0, 0
-	for _, binding := range global {
+	entry := func(binding key.Binding) string {
 		help := binding.Help()
-		leftWidth = max(leftWidth, 12+lipgloss.Width(help.Desc))
+		return t.accentText.Render(cell(help.Key, 12, false)) + help.Desc
 	}
-	for _, binding := range workspace {
-		help := binding.Help()
-		rightWidth = max(rightWidth, 12+lipgloss.Width(help.Desc))
+	columnWidth := func(bindings []key.Binding) int {
+		result := 0
+		for _, binding := range bindings {
+			result = max(result, 12+lipgloss.Width(binding.Help().Desc))
+		}
+		return result
 	}
-	rows := max(len(global), len(workspace))
-	lines := []string{t.title.Render(cell("Global", leftWidth, false)) + "    " + t.title.Render(cell("Workspace", rightWidth, false))}
-	for i := range rows {
-		left, right := "", ""
-		if i < len(global) {
-			help := global[i].Help()
-			left = t.accentText.Render(cell(help.Key, 12, false)) + help.Desc
+	leftWidth, rightWidth := columnWidth(global), columnWidth(workspace)
+
+	var lines []string
+	if leftWidth+4+rightWidth <= max(0, width-4) {
+		lines = append(lines, t.title.Render(cell("Global", leftWidth, false))+"    "+t.title.Render(cell("Workspace", rightWidth, false)))
+		for i := range max(len(global), len(workspace)) {
+			left, right := "", ""
+			if i < len(global) {
+				left = entry(global[i])
+			}
+			if i < len(workspace) {
+				right = entry(workspace[i])
+			}
+			lines = append(lines, cell(left, leftWidth, false)+"    "+cell(right, rightWidth, false))
 		}
-		if i < len(workspace) {
-			help := workspace[i].Help()
-			right = t.accentText.Render(cell(help.Key, 12, false)) + help.Desc
+	} else {
+		lines = append(lines, t.title.Render("Global"))
+		for _, binding := range global {
+			lines = append(lines, entry(binding))
 		}
-		lines = append(lines, cell(left, leftWidth, false)+"    "+cell(right, rightWidth, false))
+		lines = append(lines, "", t.title.Render("Workspace"))
+		for _, binding := range workspace {
+			lines = append(lines, entry(binding))
+		}
 	}
 	return renderOverlay("Help", strings.Join(lines, "\n"), width, height, t)
 }

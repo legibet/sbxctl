@@ -185,6 +185,18 @@ func (w *proxiesWorkspace) leftView(width int) string {
 	} else {
 		header = w.theme.dimText.Render(header)
 	}
+	countWidth := 5
+	typeWidth := min(10, max(0, width/4))
+	remaining := max(0, width-countWidth-typeWidth-2)
+	// Group tags are usually shorter than the outbound they select, so give the
+	// name column what the tags actually need and leave the rest to the outbound.
+	nameWidth := 0
+	for _, group := range w.groups {
+		nameWidth = max(nameWidth, ansi.StringWidth(group.Tag))
+	}
+	nameWidth = min(nameWidth, remaining/2)
+	selectedWidth := max(0, remaining-nameWidth)
+
 	lines := []string{fitLine(header, width)}
 	start, end := w.left.visible()
 	for position := start; position < end; position++ {
@@ -198,11 +210,6 @@ func (w *proxiesWorkspace) leftView(width int) string {
 			line = cell(name, max(0, width-6), false) + w.theme.dimText.Render(cell("", 1, false)+cell(strconv.Itoa(len(w.outbounds)), 5, true))
 		} else {
 			group := w.groups[groupIndex]
-			countWidth := 5
-			typeWidth := min(10, max(0, width/4))
-			remaining := max(0, width-countWidth-typeWidth-2)
-			nameWidth := max(0, remaining/2)
-			selectedWidth := max(0, remaining-nameWidth)
 			name := group.Tag
 			if position == w.left.index {
 				name = w.theme.accentText.Render(name)

@@ -77,9 +77,11 @@ Proxies, Connections and Logs each implement `workspace` (`setSize`, `handleKey`
 
 ### Frame
 
-The top bar carries server name, connection dot, version, uptime, Clash mode, rates and live connection count, dropping the traffic fields when the server has none. A tab row and a footer take one line each. Filtering, workspace confirmation and messages borrow the footer rather than opening a window. Help, connection details and the server manager are centered overlays, the only places that draw a border. The manager's list, form and confirmations share one fixed-width frame.
+The top bar carries server name, connection dot, version, uptime, Clash mode, rates and live connection count, dropping the traffic fields when the server has none. A tab row and a footer take one line each. Filtering, workspace confirmation and messages borrow the footer rather than opening a window. Help, connection details and the server manager are centered overlays, the only places that draw a border. The manager's list, form and confirmations share one fixed-width frame, and while it is open the footer shows the config file it writes.
 
-Each workspace emits exactly `width` by `height` cells through `exactLines` and renders only the rows inside the viewport. 80x24 is the floor, below which the app shows a message instead. Proxies splits into two panes at 100 columns and above, the left one taking a third.
+Each workspace emits exactly `width` by `height` cells through `exactLines` and renders only the rows inside the viewport. The floor is 46x14, below which the app shows a message instead: 46 columns still fits destination, outbound and a rate in Connections, and 14 rows still lists three servers in the manager.
+
+Above the floor, content is dropped by value rather than by position, so nothing important falls off the right edge. The top bar drops uptime, then mode, then rates. Key hints shed the least useful first and always keep the way out: the footer drops workspace keys then `ctrl+t`, keeping `?` because the help overlay lists every binding, and the server manager keeps `Esc`. Connections drops columns in the order rule, inbound, source, up, age, down, outbound, with destination absorbing the leftover width; the breakpoints land at 122, 102, 90, 66 and 54 columns. Proxies keeps every column and instead splits into two panes at 100 columns, the left one taking a third; its group column is sized to the longest tag, capped at half the pane, leaving the rest for the selected outbound. Help falls back to a single column when two do not fit.
 
 ### Color
 

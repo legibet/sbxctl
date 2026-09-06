@@ -95,12 +95,15 @@ func TestUnicodeModeReportRepaintsScreen(t *testing.T) {
 }
 
 func TestAppViewDimensions(t *testing.T) {
-	for _, size := range []struct{ width, height int }{{80, 24}, {140, 40}} {
+	sizes := []struct{ width, height int }{{46, 14}, {80, 24}, {140, 40}}
+	for _, size := range sizes {
 		t.Run(strconv.Itoa(size.width), func(t *testing.T) {
 			a := newApp(sbx.Endpoint{URL: "http://127.0.0.1:9090"}, "home", &config.File{Servers: map[string]config.Server{}}, nil)
 			a.overlay = overlayNone
 			a.info = sbx.ServerInfo{Version: sbx.Version{Version: "1.14.0", APIVersion: 4}, StartedAt: time.Now().Add(-time.Hour)}
 			a.connState = sbx.StateConnected
+			a.status = sbx.Status{TrafficAvailable: true, Uplink: 1000, Downlink: 2000, ConnectionsIn: 3}
+			a.mode = "rule"
 			a.width, a.height = size.width, size.height
 			a.resizeWorkspaces()
 			for active := range 3 {
@@ -128,9 +131,30 @@ func TestAppViewDimensions(t *testing.T) {
 				assertViewDimensions(t, a.View().Content, size.width, size.height)
 			}
 			a.active = 1
-			a.overlay = overlayConnection
-			assertViewDimensions(t, a.View().Content, size.width, size.height)
+			for _, overlay := range []overlayKind{overlayConnection, overlayHelp, overlayServers} {
+				a.overlay = overlay
+				assertViewDimensions(t, a.View().Content, size.width, size.height)
+			}
 		})
+	}
+}
+
+// The help overlay is the only complete list of keys, so its hint has to
+// survive however narrow the footer gets.
+func TestFooterDropsHintsButKeepsHelp(t *testing.T) {
+	a := newApp(sbx.Endpoint{URL: "http://127.0.0.1:9090"}, "home", nil, nil)
+	a.overlay = overlayNone
+	a.width, a.height = 46, 14
+	a.resizeWorkspaces()
+	for active := range 3 {
+		a.active = active
+		if footer := ansi.Strip(a.footer()); !strings.Contains(footer, "? help") {
+			t.Errorf("workspace %d footer = %q, want it to keep ? help", active, footer)
+		}
+	}
+	a.width, a.active = 140, 1
+	if footer := ansi.Strip(a.footer()); !strings.Contains(footer, "x close") {
+		t.Errorf("wide footer = %q, want the workspace keys kept", footer)
 	}
 }
 
